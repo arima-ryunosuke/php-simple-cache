@@ -1,0 +1,48 @@
+{
+  "config": {
+    "platform": {
+      "php": "7.4.6"
+    }
+  },
+  "name": "ryunosuke/simple-cache",
+  "type": "library",
+  "description": "simple psr-16 cache",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "ryunosuke",
+      "email": "ryunosuke.arima@gmail.com"
+    }
+  ],
+  "require": {
+    "php": ">=7.4",
+    "psr/simple-cache": "<3",
+    "symfony/var-exporter": "5.*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "9.*",
+    "ryunosuke/phpunit-extension": "3.*",
+    "ryunosuke/functions": "1.6.*",
+    "ryunosuke/stream-wrapper": "1.*",
+    "aws/aws-sdk-php": "3.*",
+    "predis/predis": "2.*"
+  },
+  "autoload": {
+    "psr-4": {
+      "ryunosuke\\SimpleCache\\": "src/SimpleCache"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "ryunosuke\\Test\\": "tests/Test"
+    }
+  },
+  "scripts": {
+    "build": [
+      "@test"
+    ],
+    "test": [
+      "php vendor/phpunit/phpunit/phpunit --configuration=tests/phpunit.xml"
+    ]
+  }
+}
