@@ -1,0 +1,19 @@
+<phpunit bootstrap="bootstrap.php" printerClass="\ryunosuke\PHPUnit\Printer\ProgressPrinter">
+    <testsuites>
+        <testsuite name="tests">
+            <directory>./Test/</directory>
+        </testsuite>
+    </testsuites>
+
+    <php>
+        <const name="REDIS_URL" value="redis://127.0.0.1:6379/1"/>
+        <const name="MYSQL_URL" value="mysql://root:Password1234@127.0.0.1:3306/testdb/cache"/>
+        <const name="S3_URL" value="s3://minio:minio123@127.0.0.1:9000/cache-bucket"/>
+    </php>
+
+    <coverage>
+        <include>
+            <directory suffix=".php">../src</directory>
+        </include>
+    </coverage>
+</phpunit>
