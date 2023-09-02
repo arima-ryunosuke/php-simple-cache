@@ -46,5 +46,31 @@ class ChainCacheTest extends AbstractTestCase
         that($cache)->has('piyo')->is(false);
         that($cache1)->has('piyo')->is(false);
         that($cache2)->has('piyo')->is(false);
+
+        $cache1->set('hogera', 'hogera1');
+        $cache2->set('hogera', 'hogera2');
+        that($cache)->get('hogera', 'notfound')->is('hogera1');
+        that($cache1)->get('hogera')->is('hogera1');
+        that($cache2)->get('hogera')->is('hogera2');
+
+        $cache1->set('hogera1', 'hogera1');
+        $cache2->set('hogera2', 'hogera2');
+        that($cache)->has('hogera1')->is(true);
+        that($cache)->has('hogera2')->is(true);
+        that($cache1)->has('hogera2')->is(false);
+        that($cache2)->has('hogera1')->is(false);
+        that($cache)->getMultiple(['hogera1', 'hogera2', 'hogera3'], 'notfound')->is([
+            "hogera1" => "hogera1",
+            "hogera2" => "hogera2",
+            "hogera3" => "notfound",
+        ]);
+        that($cache1)->has('hogera2')->is(true);
+        that($cache2)->has('hogera1')->is(false);
+        that($cache1)->has('hogera3')->is(false);
+        that($cache2)->has('hogera3')->is(false);
+
+        that($cache)->fetch('hogera3', fn() => 'hogera3')->is('hogera3');
+        that($cache1)->has('hogera3')->is(true);
+        that($cache2)->has('hogera3')->is(true);
     }
 }

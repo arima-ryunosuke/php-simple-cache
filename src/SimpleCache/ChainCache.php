@@ -3,11 +3,11 @@
 namespace ryunosuke\SimpleCache;
 
 use Psr\SimpleCache\CacheInterface;
-use ryunosuke\SimpleCache\Contract\MultipleTrait;
+use ryunosuke\SimpleCache\Contract\SingleTrait;
 
 class ChainCache implements CacheInterface
 {
-    use MultipleTrait;
+    use SingleTrait;
 
     /** @var CacheInterface[] */
     private array $internals;
@@ -17,47 +17,67 @@ class ChainCache implements CacheInterface
         $this->internals = $internals;
     }
 
-    public function get($key, $default = null)
+    public function getMultiple($keys, $default = null)
     {
-        $result  = $this;
-        $setters = [];
+        $result   = [];
+        $defaults = [];
+        $missings = [];
 
-        // get which
-        foreach ($this->internals as $internal) {
-            $result = $internal->get($key, $this);
-            if ($result !== $this) {
+        // get from internals
+        foreach ($this->internals as $n => $internal) {
+            $values = $internal->getMultiple($keys, $this);
+
+            $keys = [];
+            foreach ($values as $key => $item) {
+                // missing
+                if ($item === $this) {
+                    $keys[]             = $key;
+                    $defaults[]         = $key;
+                    $missings[$n][$key] = true;
+                }
+                // found
+                else {
+                    $result[$key] = $item;
+                }
+            }
+
+            // found all
+            if (!$keys) {
                 break;
             }
-            $setters[] = $internal;
-        }
-
-        // not found
-        if ($result === $this) {
-            return $default;
         }
 
         // sync other
-        foreach ($setters as $setter) {
-            $setter->set($key, $result);
+        foreach ($missings as $n => $missingKeys) {
+            $this->internals[$n]->setMultiple(array_intersect_key($result, $missingKeys));
         }
 
-        return $result;
+        return $result + array_fill_keys($defaults, $default);
     }
 
-    public function set($key, $value, $ttl = null)
+    public function setMultiple($values, $ttl = null)
     {
         $result = true;
         foreach ($this->internals as $internal) {
-            $result = $internal->set($key, $value, $ttl) && $result;
+            $result = $internal->setMultiple($values, $ttl) && $result;
         }
         return $result;
     }
 
-    public function delete($key)
+    public function deleteMultiple($keys)
     {
         $result = true;
         foreach ($this->internals as $internal) {
-            $result = $internal->delete($key) && $result;
+            $result = $internal->deleteMultiple($keys) && $result;
+        }
+        return $result;
+    }
+
+    public function fetchMultiple($providers, $ttl = null)
+    {
+        $result = true;
+        foreach ($this->internals as $internal) {
+            $result = $internal->fetchMultiple($providers, $ttl) && $result;
         }
         return $result;
     }
