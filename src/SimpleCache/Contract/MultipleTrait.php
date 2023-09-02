@@ -4,7 +4,7 @@ namespace ryunosuke\SimpleCache\Contract;
 
 trait MultipleTrait
 {
-    public function getMultiple($keys, $default = null)
+    public function getMultiple($keys, $default = null): iterable
     {
         $result = [];
         foreach ($keys as $key) {
@@ -13,7 +13,7 @@ trait MultipleTrait
         return $result;
     }
 
-    public function setMultiple($values, $ttl = null)
+    public function setMultiple($values, $ttl = null): bool
     {
         $result = true;
         foreach ($values as $key => $value) {
@@ -22,7 +22,7 @@ trait MultipleTrait
         return $result;
     }
 
-    public function deleteMultiple($keys)
+    public function deleteMultiple($keys): bool
     {
         $result = true;
         foreach ($keys as $key) {
@@ -31,7 +31,7 @@ trait MultipleTrait
         return $result;
     }
 
-    public function fetchMultiple($providers, $ttl = null)
+    public function fetchMultiple($providers, $ttl = null): iterable
     {
         $result = [];
         foreach ($providers as $key => $provider) {

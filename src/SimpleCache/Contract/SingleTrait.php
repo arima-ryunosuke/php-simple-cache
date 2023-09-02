@@ -9,12 +9,12 @@ trait SingleTrait
         return $this->getMultiple([$key], $default)[$key];
     }
 
-    public function set($key, $value, $ttl = null)
+    public function set($key, $value, $ttl = null): bool
     {
         return $this->setMultiple([$key => $value], $ttl);
     }
 
-    public function delete($key)
+    public function delete($key): bool
     {
         return $this->deleteMultiple([$key]);
     }

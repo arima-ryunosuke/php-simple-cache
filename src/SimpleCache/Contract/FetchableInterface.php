@@ -19,5 +19,5 @@ interface FetchableInterface
      * @param ?int $ttl $ttl
      * @return array caches or provider's returns
      */
-    public function fetchMultiple(iterable $providers, $ttl = null);
+    public function fetchMultiple(iterable $providers, $ttl = null): iterable;
 }

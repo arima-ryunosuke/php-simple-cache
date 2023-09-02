@@ -2,7 +2,7 @@
 
 namespace ryunosuke\SimpleCache;
 
-use Psr\SimpleCache\CacheInterface;
+use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\SingleTrait;
 
 class ChainCache implements CacheInterface
@@ -17,7 +17,7 @@ class ChainCache implements CacheInterface
         $this->internals = $internals;
     }
 
-    public function getMultiple($keys, $default = null)
+    public function getMultiple($keys, $default = null): iterable
     {
         $result   = [];
         $defaults = [];
@@ -55,7 +55,7 @@ class ChainCache implements CacheInterface
         return $result + array_fill_keys($defaults, $default);
     }
 
-    public function setMultiple($values, $ttl = null)
+    public function setMultiple($values, $ttl = null): bool
     {
         $result = true;
         foreach ($this->internals as $internal) {
@@ -64,7 +64,7 @@ class ChainCache implements CacheInterface
         return $result;
     }
 
-    public function deleteMultiple($keys)
+    public function deleteMultiple($keys): bool
     {
         $result = true;
         foreach ($this->internals as $internal) {
@@ -82,7 +82,7 @@ class ChainCache implements CacheInterface
         return $result;
     }
 
-    public function clear()
+    public function clear(): bool
     {
         $result = true;
         foreach ($this->internals as $internal) {
@@ -91,7 +91,7 @@ class ChainCache implements CacheInterface
         return $result;
     }
 
-    public function has($key)
+    public function has($key): bool
     {
         foreach ($this->internals as $internal) {
             if ($internal->has($key)) {

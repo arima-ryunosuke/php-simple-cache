@@ -3,9 +3,9 @@
 namespace ryunosuke\SimpleCache;
 
 use Exception;
-use Psr\SimpleCache\CacheInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\IterableInterface;
@@ -93,7 +93,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     }
 
     /** @inheritdoc */
-    public function set($key, $value, $ttl = null)
+    public function set($key, $value, $ttl = null): bool
     {
         $ttl = InvalidArgumentException::normalizeTtlOrThrow($ttl) ?? $this->defaultTtl;
 
@@ -111,7 +111,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     }
 
     /** @inheritdoc */
-    public function delete($key)
+    public function delete($key): bool
     {
         $item = $this->items[$key] ?? $this->createItem($this->_filename($key));
 
@@ -121,7 +121,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     }
 
     /** @inheritdoc */
-    public function clear()
+    public function clear(): bool
     {
         $this->items = [];
 
@@ -129,7 +129,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     }
 
     /** @inheritdoc */
-    public function has($key)
+    public function has($key): bool
     {
         return $this->get($key, $this) !== $this;
     }
