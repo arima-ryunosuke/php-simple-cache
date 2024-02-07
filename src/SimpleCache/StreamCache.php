@@ -66,6 +66,23 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
         $this->cachemap = [];
     }
 
+    public function __debugInfo()
+    {
+        $classname  = self::class;
+        $properties = (array) $this;
+
+        $unsets = [
+            "\0$classname\0items",
+            "\0$classname\0cachemap",
+        ];
+        foreach ($unsets as $unset) {
+            assert(array_key_exists($unset, $properties));
+            unset($properties[$unset]);
+        }
+
+        return $properties;
+    }
+
     public function withNamespace(string $namespace): self
     {
         $that = clone $this;

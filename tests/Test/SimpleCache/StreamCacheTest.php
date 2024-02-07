@@ -42,6 +42,16 @@ class StreamCacheTest extends AbstractTestCase
     /**
      * @dataProvider provideUrl
      */
+    function test___debugInfo($url, $options)
+    {
+        $this->expectOutputRegex('#:private#');
+        $cache = new StreamCache($url, $options);
+        var_dump($cache);
+    }
+
+    /**
+     * @dataProvider provideUrl
+     */
     function test_withNamespace($url, $options)
     {
         $cache    = new StreamCache($url, $options);
