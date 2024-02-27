@@ -22,6 +22,22 @@ abstract class AbstractItemTestCase extends AbstractTestCase
         that($item2)->delete()->isFalse();
     }
 
+    function test_size()
+    {
+        $path = 'file://' . sys_get_temp_dir() . "/$this->id";
+        $item1 = new static::$testClass($path);
+        $item2 = new static::$testClass($path);
+        $item3 = new static::$testClass($path);
+
+        that($item1)->set('hoge', 1)->isTrue();
+        that($item1)->size()->gt(100);
+
+        that($item2)->size()->gt(100);
+
+        unlink($path);
+        that($item3)->size()->is(0);
+    }
+
     function test_set()
     {
         $path = 'file://' . sys_get_temp_dir() . "/dir/$this->id";

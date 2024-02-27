@@ -86,6 +86,23 @@ class StreamCacheTest extends AbstractTestCase
         that($cache)->items->notHasKey($this->id);
         that($cache)->delete($this->id)->isTrue();
         that($cache)->items->notHasKey($this->id);
+
+        $cache = new StreamCache($url, $options + ['memorize' => 9]);
+
+        that($cache)->set("$this->id-1", '1')->isTrue();
+        that($cache)->set("$this->id-2", '2')->isTrue();
+        that($cache)->set("$this->id-3", '3')->isTrue();
+        that($cache)->set("$this->id-4", '4')->isTrue();
+        that($cache)->set("$this->id-5", '5')->isTrue();
+        that($cache)->set("$this->id-6", '6')->isTrue();
+        that($cache)->set("$this->id-7", '7')->isTrue();
+        that($cache)->set("$this->id-8", '8')->isTrue();
+        that($cache)->set("$this->id-9", '9')->isTrue();
+        that($cache)->items->count(6);
+        that($cache)->items->hasKey("$this->id-4");
+        that($cache)->items->notHasKey("$this->id-3");
+        that($cache)->items->notHasKey("$this->id-2");
+        that($cache)->items->notHasKey("$this->id-1");
     }
 
     /**

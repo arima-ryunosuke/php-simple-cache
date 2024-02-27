@@ -17,6 +17,19 @@ abstract class AbstractItem
         $this->filename = $filename;
     }
 
+    public function size(): int
+    {
+        if (!isset($this->metadata['size'])) {
+            if ($this->get() === null) {
+                $this->metadata['size'] = 0;
+            }
+            else {
+                $this->metadata['size'] = file_exists($this->filename) ? (@filesize($this->filename) ?: 0) : 0;
+            }
+        }
+        return $this->metadata['size'];
+    }
+
     public function get()
     {
         if (!isset($this->metadata)) {
@@ -54,6 +67,8 @@ abstract class AbstractItem
         if ($contents === null) {
             return true; // @codeCoverageIgnore
         }
+
+        $this->metadata['size'] = strlen($contents);
 
         // scheme context
         $context = null;

@@ -24,7 +24,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     private bool   $directorySupport;
 
     private int   $defaultTtl;
-    private bool  $memorize;
+    private int   $memorize;
     private array $itemClasses;
 
     /** @var AbstractItem[] */
@@ -55,7 +55,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
         })($this->directory);
 
         $this->defaultTtl  = $options['defaultTtl'] ?? 60 * 60 * 24 * 365 * 10;
-        $this->memorize    = $options['memorize'] ?? true;
+        $this->memorize    = ($options['memorize'] ?? true) === true ? PHP_INT_MAX : $options['memorize']; // for compatible
         $this->itemClasses = $options['itemClasses'] ?? [];
         $this->itemClasses += [
             'php'           => \ryunosuke\SimpleCache\Item\PhpItem::class,
@@ -102,7 +102,10 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     {
         $item = $this->items[$key] ??= $this->createItem($this->_filename($key));
 
-        if (!$this->memorize) {
+        if ($this->memorize) {
+            $this->trimMemo();
+        }
+        else {
             unset($this->items[$key]);
         }
 
@@ -118,9 +121,12 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
             return $this->delete($key);
         }
 
-        $item = $this->items[$key] = $this->createItem($this->_filename($key));
+        $item = $this->items[$key] ??= $this->createItem($this->_filename($key));
 
-        if (!$this->memorize) {
+        if ($this->memorize) {
+            $this->trimMemo();
+        }
+        else {
             unset($this->items[$key]);
         }
 
@@ -296,6 +302,14 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
             return null;
         }
         return new $classname($filename);
+    }
+
+    private function trimMemo(): void
+    {
+        // trim by item size in future scope
+        if ($this->memorize <= count($this->items)) {
+            $this->items = array_slice($this->items, $this->memorize / 3, null, true);
+        }
     }
 
     private static function getExtension(string $url): ?string
