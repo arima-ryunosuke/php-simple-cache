@@ -3,12 +3,14 @@
 namespace ryunosuke\SimpleCache;
 
 use ryunosuke\SimpleCache\Contract\CacheInterface;
+use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
+use ryunosuke\SimpleCache\Contract\IterableInterface;
 use ryunosuke\SimpleCache\Contract\SingleTrait;
 use Traversable;
 
-class ChainCache implements CacheInterface, FetchableInterface
+class ChainCache implements CacheInterface, FetchableInterface, IterableInterface, CleanableInterface
 {
     use SingleTrait;
     use FetchTrait;
@@ -21,6 +23,9 @@ class ChainCache implements CacheInterface, FetchableInterface
         $this->internals = $internals;
     }
 
+    // <editor-fold desc="CacheInterface">
+
+    /** @inheritdoc */
     public function getMultiple($keys, $default = null): iterable
     {
         $keys   = $keys instanceof Traversable ? iterator_to_array($keys) : $keys;
@@ -59,6 +64,7 @@ class ChainCache implements CacheInterface, FetchableInterface
         return $result + array_fill_keys($keys, $default);
     }
 
+    /** @inheritdoc */
     public function setMultiple($values, $ttl = null): bool
     {
         $result = true;
@@ -68,6 +74,7 @@ class ChainCache implements CacheInterface, FetchableInterface
         return $result;
     }
 
+    /** @inheritdoc */
     public function deleteMultiple($keys): bool
     {
         $result = true;
@@ -77,6 +84,7 @@ class ChainCache implements CacheInterface, FetchableInterface
         return $result;
     }
 
+    /** @inheritdoc */
     public function clear(): bool
     {
         $result = true;
@@ -86,6 +94,7 @@ class ChainCache implements CacheInterface, FetchableInterface
         return $result;
     }
 
+    /** @inheritdoc */
     public function has($key): bool
     {
         foreach ($this->internals as $internal) {
@@ -95,4 +104,49 @@ class ChainCache implements CacheInterface, FetchableInterface
         }
         return false;
     }
+
+    // </editor-fold>
+
+    // <editor-fold desc="IterableInterface">
+
+    /** @inheritdoc */
+    public function keys(?string $pattern = null): iterable
+    {
+        return array_keys($this->items($pattern));
+    }
+
+    /** @inheritdoc */
+    public function items(?string $pattern = null): iterable
+    {
+        $internals = array_filter($this->internals, fn($internal) => $internal instanceof IterableInterface);
+
+        $result = [];
+        foreach ($internals as $internal) {
+            $items  = $internal->items($pattern);
+            $result += $items instanceof Traversable ? iterator_to_array($items) : $items;
+        }
+        return $result;
+    }
+
+    // </editor-fold>
+
+    // <editor-fold desc="CleanableInterface">
+
+    /** @inheritdoc */
+    public function gc(float $probability, ?float $maxsecond = null): int
+    {
+        $internals = array_filter($this->internals, fn($internal) => $internal instanceof CleanableInterface);
+
+        if ($maxsecond !== null) {
+            $maxsecond /= count($internals);
+        }
+
+        $result = 0;
+        foreach ($internals as $internal) {
+            $result += $internal->gc($probability, $maxsecond);
+        }
+        return $result;
+    }
+
+    // </editor-fold>
 }

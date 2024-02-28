@@ -11,8 +11,8 @@ class ChainCacheTest extends AbstractTestCase
     function test_all()
     {
         $url    = self::emptyDirectory();
-        $cache1 = new StreamCache("$url/1");
-        $cache2 = new StreamCache("$url/2");
+        $cache1 = new StreamCache("$url/1", ['defaultTtl' => 2]);
+        $cache2 = new StreamCache("$url/2", ['defaultTtl' => 2]);
         $cache  = new ChainCache([$cache1, $cache2]);
 
         that($cache)->get('hoge', 'notfound')->is('notfound');
@@ -72,5 +72,10 @@ class ChainCacheTest extends AbstractTestCase
         that($cache)->fetch('hogera3', fn() => 'hogera3')->is('hogera3');
         that($cache1)->has('hogera3')->is(true);
         that($cache2)->has('hogera3')->is(true);
+
+        that($cache)->keys()->is(["hogera", "hogera1", "hogera2", "hogera3"], null, true);
+        sleep(2);
+        that($cache)->gc(1, 3)->is(7);
+        that($cache)->keys()->is([]);
     }
 }

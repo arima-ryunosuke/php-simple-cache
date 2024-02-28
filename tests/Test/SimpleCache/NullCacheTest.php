@@ -7,6 +7,22 @@ use ryunosuke\Test\AbstractTestCase;
 
 class NullCacheTest extends AbstractTestCase
 {
+    function test_all()
+    {
+        $cache = new NullCache(true, true);
+
+        that($cache)->set("$this->id-1", '1')->is(true);
+        that($cache)->has("$this->id-1")->is(false);
+        that($cache)->get("$this->id-1")->is(null);
+        that($cache)->delete("$this->id-1")->is(true);
+        that($cache)->clear()->is(true);
+
+        that($cache)->keys()->is([]);
+        that($cache)->items()->is([]);
+
+        that($cache)->gc(1)->is(0);
+    }
+
     function test_enabledSlashKey()
     {
         $cache = new NullCache(true);
