@@ -4,6 +4,7 @@ namespace ryunosuke\SimpleCache;
 
 use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\SingleTrait;
+use Traversable;
 
 class ChainCache implements CacheInterface
 {
@@ -19,25 +20,25 @@ class ChainCache implements CacheInterface
 
     public function getMultiple($keys, $default = null): iterable
     {
+        $keys   = $keys instanceof Traversable ? iterator_to_array($keys) : $keys;
+        $keymap = array_flip($keys);
+
         $result   = [];
-        $defaults = [];
         $missings = [];
 
         // get from internals
         foreach ($this->internals as $n => $internal) {
             $values = $internal->getMultiple($keys, $this);
 
-            $keys = [];
-            foreach ($values as $key => $item) {
+            foreach ($values as $key => $value) {
                 // missing
-                if ($item === $this) {
-                    $keys[]             = $key;
-                    $defaults[]         = $key;
+                if ($value === $this) {
                     $missings[$n][$key] = true;
                 }
                 // found
                 else {
-                    $result[$key] = $item;
+                    $result[$key] = $value;
+                    unset($keys[$keymap[$key]]);
                 }
             }
 
@@ -52,7 +53,7 @@ class ChainCache implements CacheInterface
             $this->internals[$n]->setMultiple(array_intersect_key($result, $missingKeys));
         }
 
-        return $result + array_fill_keys($defaults, $default);
+        return $result + array_fill_keys($keys, $default);
     }
 
     public function setMultiple($values, $ttl = null): bool
