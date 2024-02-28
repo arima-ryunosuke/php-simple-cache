@@ -8,6 +8,7 @@ use RecursiveIteratorIterator;
 use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
+use ryunosuke\SimpleCache\Contract\FetchTrait;
 use ryunosuke\SimpleCache\Contract\IterableInterface;
 use ryunosuke\SimpleCache\Contract\MultipleTrait;
 use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
@@ -17,6 +18,7 @@ use Throwable;
 class StreamCache implements CacheInterface, FetchableInterface, IterableInterface, CleanableInterface
 {
     use MultipleTrait;
+    use FetchTrait;
 
     private string $directory;
     private string $defaultExtension;
@@ -155,21 +157,6 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     public function has($key): bool
     {
         return $this->get($key, $this) !== $this;
-    }
-
-    // </editor-fold>
-
-    // <editor-fold desc="FetchableInterface">
-
-    /** @inheritdoc */
-    public function fetch($key, $provider, $ttl = null)
-    {
-        $value = $this->get($key, $this);
-        if ($value === $this) {
-            $value = $provider($this);
-            $this->set($key, $value, $ttl);
-        }
-        return $value;
     }
 
     // </editor-fold>

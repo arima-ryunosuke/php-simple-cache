@@ -3,12 +3,15 @@
 namespace ryunosuke\SimpleCache;
 
 use ryunosuke\SimpleCache\Contract\CacheInterface;
+use ryunosuke\SimpleCache\Contract\FetchableInterface;
+use ryunosuke\SimpleCache\Contract\FetchTrait;
 use ryunosuke\SimpleCache\Contract\SingleTrait;
 use Traversable;
 
-class ChainCache implements CacheInterface
+class ChainCache implements CacheInterface, FetchableInterface
 {
     use SingleTrait;
+    use FetchTrait;
 
     /** @var CacheInterface[] */
     private array $internals;
@@ -70,15 +73,6 @@ class ChainCache implements CacheInterface
         $result = true;
         foreach ($this->internals as $internal) {
             $result = $internal->deleteMultiple($keys) && $result;
-        }
-        return $result;
-    }
-
-    public function fetchMultiple($providers, $ttl = null)
-    {
-        $result = true;
-        foreach ($this->internals as $internal) {
-            $result = $internal->fetchMultiple($providers, $ttl) && $result;
         }
         return $result;
     }

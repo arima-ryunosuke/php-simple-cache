@@ -30,13 +30,4 @@ trait MultipleTrait
         }
         return $result;
     }
-
-    public function fetchMultiple($providers, $ttl = null): iterable
-    {
-        $result = [];
-        foreach ($providers as $key => $provider) {
-            $result[$key] = $this->fetch($key, $provider, $ttl);
-        }
-        return $result;
-    }
 }

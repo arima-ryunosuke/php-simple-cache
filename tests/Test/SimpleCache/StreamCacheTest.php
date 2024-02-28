@@ -181,15 +181,21 @@ class StreamCacheTest extends AbstractTestCase
         that($cache)->has("$this->id/y")->isFalse();
         that($cache)->has("$this->id/z")->isTrue();
 
+        $called   = [];
+        $provider = function ($value) use (&$called) {
+            $called[] = $value;
+            return $value;
+        };
         that($cache)->fetchMultiple([
-            "$this->id/x" => fn() => 'X',
-            "$this->id/y" => fn() => 'Y',
-            "$this->id/z" => fn() => 'Z',
+            "$this->id/x" => fn() => $provider('X'),
+            "$this->id/y" => fn() => $provider('Y'),
+            "$this->id/z" => fn() => $provider('Z'),
         ])->is([
             "$this->id/x" => 'X',
             "$this->id/y" => 'Y',
             "$this->id/z" => 'z',
         ]);
+        that($called)->is(['X', 'Y']);
     }
 
     /**

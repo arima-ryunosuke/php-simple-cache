@@ -18,9 +18,4 @@ trait SingleTrait
     {
         return $this->deleteMultiple([$key]);
     }
-
-    public function fetch($key, $provider, $ttl = null)
-    {
-        return $this->fetchMultiple([$key => $provider], $ttl);
-    }
 }
