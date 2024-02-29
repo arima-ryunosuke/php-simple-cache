@@ -79,6 +79,12 @@ MIT
 - マイナー: 小規模な互換性破壊の際にアップします（引数の変更、タイプヒントの追加など）
 - パッチ: 互換性破壊はありません（デフォルト引数の追加や、新たなクラスの追加、コードフォーマットなど）
 
+### 1.0.4
+
+- [feature] ChainCache/NullCache もすべての interface を完備する
+- [refactor] fetch を trait 化
+- [refactor] getMultiple の実装が気持ち悪かったのでリファクタ
+
 ### 1.0.3
 
 - [feature] メモ化にサイズ上限を実装
