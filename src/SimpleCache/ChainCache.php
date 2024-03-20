@@ -7,10 +7,11 @@ use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
 use ryunosuke\SimpleCache\Contract\IterableInterface;
+use ryunosuke\SimpleCache\Contract\LockableInterface;
 use ryunosuke\SimpleCache\Contract\SingleTrait;
 use Traversable;
 
-class ChainCache implements CacheInterface, FetchableInterface, IterableInterface, CleanableInterface
+class ChainCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface
 {
     use SingleTrait;
     use FetchTrait;
@@ -107,6 +108,21 @@ class ChainCache implements CacheInterface, FetchableInterface, IterableInterfac
 
     // </editor-fold>
 
+    // <editor-fold desc="LockableInterface">
+
+    public function lock($key, int $operation): bool
+    {
+        /** @var LockableInterface[] $internals */
+        $internals = array_filter($this->internals, fn($internal) => $internal instanceof LockableInterface);
+
+        foreach ($internals as $internal) {
+            return $internal->lock($key, $operation);
+        }
+        return false;
+    }
+
+    // </editor-fold>
+
     // <editor-fold desc="IterableInterface">
 
     /** @inheritdoc */
@@ -118,6 +134,7 @@ class ChainCache implements CacheInterface, FetchableInterface, IterableInterfac
     /** @inheritdoc */
     public function items(?string $pattern = null): iterable
     {
+        /** @var IterableInterface[] $internals */
         $internals = array_filter($this->internals, fn($internal) => $internal instanceof IterableInterface);
 
         $result = [];
@@ -135,6 +152,7 @@ class ChainCache implements CacheInterface, FetchableInterface, IterableInterfac
     /** @inheritdoc */
     public function gc(float $probability, ?float $maxsecond = null): int
     {
+        /** @var CleanableInterface[] $internals */
         $internals = array_filter($this->internals, fn($internal) => $internal instanceof CleanableInterface);
 
         if ($internals && $maxsecond !== null) {

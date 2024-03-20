@@ -3,6 +3,10 @@
 namespace ryunosuke\Test\SimpleCache;
 
 use ryunosuke\SimpleCache\ChainCache;
+use ryunosuke\SimpleCache\Contract\CacheInterface;
+use ryunosuke\SimpleCache\Contract\FetchableInterface;
+use ryunosuke\SimpleCache\Contract\FetchTrait;
+use ryunosuke\SimpleCache\Contract\MultipleTrait;
 use ryunosuke\SimpleCache\StreamCache;
 use ryunosuke\Test\AbstractTestCase;
 
@@ -77,5 +81,29 @@ class ChainCacheTest extends AbstractTestCase
         sleep(2);
         that($cache)->gc(1, 3)->is(7);
         that($cache)->keys()->is([]);
+    }
+
+    function test_misc()
+    {
+        $dummy = new class() implements CacheInterface, FetchableInterface {
+            use MultipleTrait;
+            use FetchTrait;
+
+            public function get($key, $default = null) { return $default; }
+
+            public function set($key, $value, $ttl = null): bool { return true; }
+
+            public function delete($key): bool { return true; }
+
+            public function clear(): bool { return true; }
+
+            public function has($key): bool { return false; }
+        };
+        $cache = new ChainCache([$dummy]);
+
+        that($cache)->get($this->id)->is(null);
+        that($dummy)->fetch($this->id, fn() => 'hoge')->is('hoge');
+
+        that($cache)->lock($this->id, LOCK_EX)->is(false);
     }
 }

@@ -6,6 +6,9 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ryunosuke\SimpleCache\Item\AbstractItem;
 use ryunosuke\SimpleCache\StreamCache;
+use ryunosuke\StreamWrapper\Stream\MysqlStream;
+use ryunosuke\StreamWrapper\Stream\RedisStream;
+use ryunosuke\StreamWrapper\Stream\S3Stream;
 use ryunosuke\Test\AbstractTestCase;
 
 class StreamCacheTest extends AbstractTestCase
@@ -25,16 +28,16 @@ class StreamCacheTest extends AbstractTestCase
                 rmdir($entry);
             }
         }
-        $dataset['file'] = [$cachedir, []];
+        $dataset['file'] = [$cachedir, ['lockSecond' => 0.1], null];
 
         if (REDIS_URL) {
-            $dataset['redis'] = [REDIS_URL, []];
+            $dataset['redis'] = [REDIS_URL, ['lockSecond' => null], RedisStream::class];
         }
         if (MYSQL_URL) {
-            $dataset['mysql'] = [MYSQL_URL, []];
+            $dataset['mysql'] = [MYSQL_URL, ['lockSecond' => 0], MysqlStream::class];
         }
         if (S3_URL) {
-            $dataset['s3'] = [S3_URL, ['directorySupport' => true]];
+            $dataset['s3'] = [S3_URL, ['directorySupport' => true, 'lockSecond' => null], S3Stream::class];
         }
         return $dataset;
     }
@@ -63,6 +66,135 @@ class StreamCacheTest extends AbstractTestCase
         that($subcache)->get($this->id)->is('subitem');
         if (that($cache)->directorySupport->return()) {
             that($cache)->keys()->contains("subcache/$this->id");
+        }
+    }
+
+    /**
+     * @dataProvider provideUrl
+     */
+    function test_lock($url, $options, $stream_class)
+    {
+        /*
+         * # nonlock(total 3~6 seconds)
+         * | client1                   | client2                   |
+         * |---------------------------|---------------------------|
+         * | fetch                     |                           |
+         * |   get                     |                           |
+         * |   provide                 | fetch                     |
+         * |   ...step 1               |   get                     |
+         * |   ...step 2               |   provide                 |
+         * |   ...step 3               |   ...step 1               |
+         * |   set                     |   ...step 2               |
+         * | return                    |   ...step 3               |
+         * |                           |   set                     |
+         * |                           | return                    |
+         *
+         * # uselock(total 3 seconds)
+         * | client1                   | client2                   |
+         * |---------------------------|---------------------------|
+         * | fetch                     |                           |
+         * |   get(LOCK_SH)            |                           |
+         * |   provide(LOCK_EX)        |                           |
+         * |   ...step 1               | fetch                     |
+         * |   ...step 2               |   get(LOCK_SH)            |
+         * |   ...step 3               |   ...wait client1 LOCK_EX |
+         * |   set(LOCK_UN)            |   release lock            |
+         * | return                    | return                    |
+         *
+         * # deadlock
+         * | client1                   | client2                   |
+         * |---------------------------|---------------------------|
+         * | fetch                     | fetch                     |
+         * |   get(LOCK_SH)            |   get(LOCK_SH)            |
+         * |   provide(LOCK_EX)        |   provide(LOCK_EX)        |
+         * |   ...wait client2 LOCK_SH |   ...wait client1 LOCK_SH |
+         *
+         * # edge case(race condition)
+         * | client1                   | client2                   |
+         * |---------------------------|---------------------------|
+         * | fetch                     |                           |
+         * |   get(LOCK_SH)            |                           |
+         * |                           | fetch                     |
+         * |                           |   get(LOCK_SH)            |
+         * |                           |   provide(LOCK_EX)        |
+         * |                           |   ...wait 1               |
+         * |                           |   ...wait 2               |
+         * |                           |   ...wait 3               |
+         * |                           |   release lock            |
+         * |                           | return                    |
+         * |   provide(LOCK_EX)        |                           |
+         * |   has                     |                           |
+         * |   return                  |                           |
+         */
+
+        if ($options['lockSecond'] === null) {
+            $this->markTestSkipped();
+        }
+
+        $cache = new StreamCache($url, $options);
+
+        $id = $this->id;
+
+        $this->backgroundTask(function () use ($url, $options, $stream_class, $id) {
+            if ($stream_class) {
+                $stream_class::register($url);
+            }
+            $cache = new StreamCache($url, $options);
+            return $cache->fetch($id, function () {
+                sleep(5);
+                return 1;
+            });
+        });
+        sleep(3);
+
+        $time = microtime(true);
+        that($cache)->fetch($id, fn() => 'dummy')->is(1);
+        that(microtime(true) - $time)->isBetween(2.0, 4.5);
+
+        $this->backgroundTask(function () use ($url, $options, $stream_class, $id) {
+            if ($stream_class) {
+                $stream_class::register($url);
+            }
+            $cache = new StreamCache($url, $options);
+            return $cache->fetchMultiple([
+                "$id-1" => function () {
+                    sleep(5);
+                    return 1;
+                },
+                "$id-2" => function () {
+                    sleep(5);
+                    return 2;
+                },
+            ]);
+        });
+        sleep(3);
+
+        $time = microtime(true);
+        that($cache)->fetchMultiple([
+            "$id-1" => fn() => 'dummy',
+            "$id-2" => fn() => 'dummy',
+        ])->is([
+            "$id-1" => 1,
+            "$id-2" => 2,
+        ]);
+        that(microtime(true) - $time)->isBetween(7.0, 9.5);
+
+        if ($options['lockSecond'] > 0) {
+            $this->backgroundTask(function () use ($url, $options, $stream_class, $id) {
+                if ($stream_class) {
+                    $stream_class::register($url);
+                }
+                $cache = new StreamCache($url, $options);
+                return $cache->fetch("$id-10", function () {
+                    sleep(15);
+                    return 1;
+                });
+            });
+            sleep(3);
+
+            $time = microtime(true);
+            that($cache)->fetch("$id-10", fn() => 'dummy')->is('dummy');
+            that(microtime(true) - $time)->isBetween(12.0, 14.5);
         }
     }
 

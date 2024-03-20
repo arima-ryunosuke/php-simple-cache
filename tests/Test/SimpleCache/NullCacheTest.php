@@ -17,6 +17,8 @@ class NullCacheTest extends AbstractTestCase
         that($cache)->delete("$this->id-1")->is(true);
         that($cache)->clear()->is(true);
 
+        that($cache)->lock($this->id, LOCK_EX)->is(false);
+
         that($cache)->keys()->is([]);
         that($cache)->items()->is([]);
 

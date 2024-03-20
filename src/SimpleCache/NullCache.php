@@ -7,10 +7,11 @@ use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
 use ryunosuke\SimpleCache\Contract\IterableInterface;
+use ryunosuke\SimpleCache\Contract\LockableInterface;
 use ryunosuke\SimpleCache\Contract\MultipleTrait;
 use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
 
-class NullCache implements CacheInterface, FetchableInterface, IterableInterface, CleanableInterface
+class NullCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface
 {
     use MultipleTrait;
     use FetchTrait;
@@ -59,6 +60,15 @@ class NullCache implements CacheInterface, FetchableInterface, IterableInterface
 
     /** @inheritdoc */
     public function has($key): bool
+    {
+        return false;
+    }
+
+    // </editor-fold>
+
+    // <editor-fold desc="LockableInterface">
+
+    public function lock($key, int $operation): bool
     {
         return false;
     }

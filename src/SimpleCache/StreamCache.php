@@ -10,12 +10,13 @@ use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
 use ryunosuke\SimpleCache\Contract\IterableInterface;
+use ryunosuke\SimpleCache\Contract\LockableInterface;
 use ryunosuke\SimpleCache\Contract\MultipleTrait;
 use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
 use ryunosuke\SimpleCache\Item\AbstractItem;
 use Throwable;
 
-class StreamCache implements CacheInterface, FetchableInterface, IterableInterface, CleanableInterface
+class StreamCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface
 {
     use MultipleTrait;
     use FetchTrait;
@@ -25,13 +26,15 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     private string $directorySeparator;
     private bool   $directorySupport;
 
-    private int   $defaultTtl;
-    private int   $memorize;
-    private array $itemClasses;
+    private int    $defaultTtl;
+    private ?float $lockSecond;
+    private int    $memorize;
+    private array  $itemClasses;
 
     /** @var AbstractItem[] */
     private array $items;
     private array $cachemap;
+    private array $lockings;
 
     public function __construct(string $directory, array $options = [])
     {
@@ -57,6 +60,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
         })($this->directory);
 
         $this->defaultTtl  = $options['defaultTtl'] ?? 60 * 60 * 24 * 365 * 10;
+        $this->lockSecond  = $options['lockSecond'] ?? null;
         $this->memorize    = ($options['memorize'] ?? true) === true ? PHP_INT_MAX : $options['memorize']; // for compatible
         $this->itemClasses = $options['itemClasses'] ?? [];
         $this->itemClasses += [
@@ -66,6 +70,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
 
         $this->items    = [];
         $this->cachemap = [];
+        $this->lockings = [];
     }
 
     public function __debugInfo()
@@ -76,6 +81,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
         $unsets = [
             "\0$classname\0items",
             "\0$classname\0cachemap",
+            "\0$classname\0lockings",
         ];
         foreach ($unsets as $unset) {
             assert(array_key_exists($unset, $properties));
@@ -93,6 +99,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
 
         $that->items    = [];
         $this->cachemap = [];
+        $this->lockings = [];
 
         return $that;
     }
@@ -157,6 +164,48 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     public function has($key): bool
     {
         return $this->get($key, $this) !== $this;
+    }
+
+    // </editor-fold>
+
+    // <editor-fold desc="LockableInterface">
+
+    public function lock($key, int $operation): bool
+    {
+        if ($this->lockSecond === null) {
+            return false;
+        }
+
+        $filename = $this->_filename($key);
+
+        if ($this->lockSecond > 0 && $operation !== LOCK_UN) {
+            $operation |= LOCK_NB;
+        }
+
+        if (!isset($this->lockings[$filename])) {
+            // rename(atomic copy) failed. because flock() uses mandatory locking instead of advisory locking on Windows
+            if (DIRECTORY_SEPARATOR === '\\' && strpos($filename, 'file://') === 0) {
+                $filename .= '.lock';
+            }
+            $this->lockings[$filename] = fopen($filename, 'c');
+        }
+        try {
+            $start  = microtime(true);
+            while ((microtime(true) - $start) < 10) {
+                $locked = flock($this->lockings[$filename], $operation);
+                if ($locked || $this->lockSecond === 0.0) {
+                    return $locked;
+                }
+                usleep($this->lockSecond * 1000 * 1000);
+            }
+            return false;
+        }
+        finally {
+            if ($operation === LOCK_UN) {
+                fclose($this->lockings[$filename]);
+                unset($this->lockings[$filename]);
+            }
+        }
     }
 
     // </editor-fold>
