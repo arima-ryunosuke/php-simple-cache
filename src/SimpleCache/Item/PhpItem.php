@@ -63,14 +63,20 @@ class PhpItem extends AbstractItem
 
         try {
             if (stream_is_local($filename)) {
-                yield from include $filename;
+                $result = include $filename;
             }
             else {
                 if (!file_exists($this->fallbackname)) {
                     //copy($filename, $this->fallbackname);
                     @file_put_contents($this->fallbackname, file_get_contents($filename), LOCK_EX);
                 }
-                yield from include $this->fallbackname;
+                $result = include $this->fallbackname;
+            }
+            if (is_iterable($result)) {
+                yield from $result;
+            }
+            else {
+                yield from [[], null];
             }
         }
         catch (ErrorException $e) {

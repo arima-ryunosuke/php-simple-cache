@@ -31,7 +31,7 @@ trait FetchTrait
             $result[$key] = $value;
         }
 
-        $this->setMultiple($missings);
+        $this->setMultiple($missings, $ttl);
 
         return $result;
     }

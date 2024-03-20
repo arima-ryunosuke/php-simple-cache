@@ -268,7 +268,7 @@ class StreamCache implements CacheInterface, FetchableInterface, IterableInterfa
     protected function _key(string $filename): string
     {
         return $this->cachemap[$filename] ??= (function ($filename) {
-            $extension = preg_quote($this->getExtension($filename));
+            $extension = preg_quote($this->getExtension($filename), '@');
             $key       = preg_replace("@\.$extension($|\?)@u", "", $filename);
             $key       = substr($key, strlen($this->directory) + 1);
             $key       = strtr($key, ['/' => $this->directorySeparator]);

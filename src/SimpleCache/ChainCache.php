@@ -137,7 +137,7 @@ class ChainCache implements CacheInterface, FetchableInterface, IterableInterfac
     {
         $internals = array_filter($this->internals, fn($internal) => $internal instanceof CleanableInterface);
 
-        if ($maxsecond !== null) {
+        if ($internals && $maxsecond !== null) {
             $maxsecond /= count($internals);
         }
 
