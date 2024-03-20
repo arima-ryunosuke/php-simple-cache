@@ -222,6 +222,10 @@ class Utils
      */
     public static function is_hasharray(array $array)
     {
+        if (function_exists('array_is_list')) {
+            return !array_is_list($array); // @codeCoverageIgnore
+        }
+
         $i = 0;
         foreach ($array as $k => $dummy) {
             if ($k !== $i++) {
@@ -534,7 +538,7 @@ class Utils
     {
         $cachefile = null;
         if ($cachesize && strlen($phpcode) >= $cachesize) {
-            $cachefile = \ryunosuke\SimpleCache\Utils::function_configure('cachedir') . '/' . rawurlencode(__FUNCTION__) . '-' . sha1($phpcode) . '.php';
+            $cachefile = \ryunosuke\SimpleCache\Utils::function_configure('storagedir') . '/' . rawurlencode(__FUNCTION__) . '-' . sha1($phpcode) . '.php';
             if (!file_exists($cachefile)) {
                 file_put_contents($cachefile, "<?php $phpcode", LOCK_EX);
             }
@@ -969,6 +973,7 @@ class Utils
             'flags'          => 0,    // token_get_all の $flags. TOKEN_PARSE を与えると ParseError が出ることがあるのでデフォルト 0
             'cache'          => true, // キャッシュするか否か
             'greedy'         => false,// end と nest か一致したときに処理を継続するか
+            'backtick'       => true, // `` もパースするか
             'nest_token'     => [
                 ')' => '(',
                 '}' => '{',
@@ -983,6 +988,9 @@ class Utils
             $phptag = $option['phptag'] ? '<?php ' : '';
             $phpcode = $phptag . $phpcode;
             $position = -strlen($phptag);
+
+            $backtick = '';
+            $backticking = false;
 
             $tokens = [];
             $tmp = token_get_all($phpcode, $option['flags']);
@@ -1031,9 +1039,23 @@ class Utils
                 }
                 // @codeCoverageIgnoreEnd
 
+                if (!$option['backtick']) {
+                    if ($token[1] === '`') {
+                        if ($backticking) {
+                            $token[1] = $backtick . $token[1];
+                            $backtick = '';
+                        }
+                        $backticking = !$backticking;
+                    }
+                    if ($backticking) {
+                        $backtick .= $token[1];
+                        continue;
+                    }
+                }
+
                 $token[] = $position;
                 if ($option['flags'] & \ryunosuke\SimpleCache\Utils::TOKEN_NAME) {
-                    $token[] = token_name($token[0]);
+                    $token[] = !$option['backtick'] && $token[0] === 96 ? 'T_BACKTICK' : token_name($token[0]);
                 }
 
                 $position += strlen($token[1]);
@@ -1619,7 +1641,7 @@ class Utils
      *
      * @package ryunosuke\Functions\Package\utility
      *
-     * @param array|string $option 設定。文字列指定時はその値を返す
+     * @param array|?string $option 設定。文字列指定時はその値を返す
      * @return array|string 設定値
      */
     public static function function_configure($option)
@@ -1628,6 +1650,7 @@ class Utils
 
         // default
         $config['cachedir'] ??= sys_get_temp_dir() . DIRECTORY_SEPARATOR . strtr(__NAMESPACE__, ['\\' => '%']);
+        $config['storagedir'] ??= DIRECTORY_SEPARATOR === '/' ? '/var/tmp/rf' : (getenv('ALLUSERSPROFILE') ?: sys_get_temp_dir()) . '\\rf';
         $config['placeholder'] ??= '';
         $config['var_stream'] ??= get_cfg_var('rfunc.var_stream') ?: 'VarStreamV010000';          // for compatible
         $config['memory_stream'] ??= get_cfg_var('rfunc.memory_stream') ?: 'MemoryStreamV010000'; // for compatible
@@ -1643,6 +1666,7 @@ class Utils
                         $config[$name] = $entry;
                         break;
                     case 'cachedir':
+                    case 'storagedir':
                         $entry ??= $config[$name];
                         if (!file_exists($entry)) {
                             @mkdir($entry, 0777 & (~umask()), true);
@@ -1655,7 +1679,7 @@ class Utils
                             if (!defined($entry)) {
                                 define($entry, tmpfile() ?: [] ?: '' ?: 0.0 ?: null ?: false);
                             }
-                            if (!is_resource(constant($entry))) {
+                            if (!\ryunosuke\SimpleCache\Utils::is_resourcable(constant($entry))) {
                                 // もしリソースじゃないと一意性が保てず致命的になるので例外を投げる
                                 throw new \RuntimeException('placeholder is not resource'); // @codeCoverageIgnore
                             }
@@ -1668,11 +1692,15 @@ class Utils
         }
 
         // getting
+        if ($option === null) {
+            return $config;
+        }
         if (is_string($option)) {
             switch ($option) {
                 default:
                     return $config[$option] ?? null;
                 case 'cachedir':
+                case 'storagedir':
                     $dirname = $config[$option];
                     if (!file_exists($dirname)) {
                         @mkdir($dirname, 0777 & (~umask()), true); // @codeCoverageIgnore
@@ -1828,7 +1856,41 @@ class Utils
      */
     public static function is_primitive($var)
     {
-        return is_scalar($var) || is_null($var) || is_resource($var);
+        return is_scalar($var) || is_null($var) || \ryunosuke\SimpleCache\Utils::is_resourcable($var);
+    }
+
+    /**
+     * 閉じたリソースでも true を返す is_resource
+     *
+     * マニュアル（ https://www.php.net/manual/ja/function.is-resource.php ）に記載の通り、 isresource は閉じたリソースで false を返す。
+     * リソースはリソースであり、それでは不便なこともあるので、閉じていようとリソースなら true を返す関数。
+     *
+     * Example:
+     * ```php
+     * // 閉じたリソースを用意
+     * $resource = tmpfile();
+     * fclose($resource);
+     * // is_resource は false を返すが・・・
+     * that(is_resource($resource))->isFalse();
+     * // is_resourcable は true を返す
+     * that(is_resourcable($resource))->isTrue();
+     * ```
+     *
+     * @package ryunosuke\Functions\Package\var
+     *
+     * @param mixed $var 調べる値
+     * @return bool リソースなら true
+     */
+    public static function is_resourcable($var)
+    {
+        if (is_resource($var)) {
+            return true;
+        }
+        // もっといい方法があるかもしれないが、簡単に調査したところ gettype するしか術がないような気がする
+        if (strpos(gettype($var), 'resource') === 0) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -1874,18 +1936,23 @@ class Utils
      * 各種オブジェクトやクロージャ、循環参照を含む配列など様々なものが出力できる。
      * ただし、下記は不可能あるいは復元不可（今度も対応するかは未定）。
      *
-     * - Generator クラス
      * - 特定の内部クラス（PDO など）
-     * - リソース
-     * - アロー関数によるクロージャ
+     * - 大部分のリソース
      *
      * オブジェクトは「リフレクションを用いてコンストラクタなしで生成してプロパティを代入する」という手法で復元する。
+     * ただしコンストラクタが必須引数無しの場合はコールされる。
      * のでクラスによってはおかしな状態で復元されることがある（大体はリソース型のせいだが…）。
      * sleep, wakeup, Serializable などが実装されているとそれはそのまま機能する。
      * set_state だけは呼ばれないので注意。
      *
+     * Generator は元となった関数/メソッドを再コールすることで復元される。
+     * その仕様上、引数があると呼べないし、実行位置はリセットされる。
+     *
      * クロージャはコード自体を引っ張ってきて普通に function (){} として埋め込む。
      * クラス名のエイリアスや use, $this バインドなど可能な限り復元するが、おそらくあまりに複雑なことをしてると失敗する。
+     *
+     * リソースはファイル的なリソースであればメタ情報を出力して復元時に再オープンする。
+     * それ以外のリソースは null で出力される（将来的に例外にするかもしれない）。
      *
      * 軽くベンチを取ったところ、オブジェクトを含まない純粋な配列の場合、serialize の 200 倍くらいは速い（それでも var_export の方が速いが…）。
      * オブジェクトを含めば含むほど遅くなり、全要素がオブジェクトになると serialize と同程度になる。
@@ -1932,9 +1999,9 @@ class Utils
 
             public function varId($var)
             {
-                // オブジェクトは明確な ID が取れる（closure/object の区分けに処理的な意味はない）
+                // オブジェクトは明確な ID が取れる（generator/closure/object の区分けに処理的な意味はない）
                 if (is_object($var)) {
-                    $id = ($var instanceof \Closure ? 'closure' : 'object') . (spl_object_id($var) + 1);
+                    $id = ($var instanceof \Generator ? 'generator' : ($var instanceof \Closure ? 'closure' : 'object')) . (spl_object_id($var) + 1);
                     $this->vars[$id] = $var;
                     return $id;
                 }
@@ -1944,6 +2011,12 @@ class Utils
                     if (!$id) {
                         $id = 'array' . (count($this->vars) + 1);
                     }
+                    $this->vars[$id] = $var;
+                    return $id;
+                }
+                // リソースも一応は ID がある
+                if (\ryunosuke\SimpleCache\Utils::is_resourcable($var)) {
+                    $id = 'resource' . (int) $var;
                     $this->vars[$id] = $var;
                     return $id;
                 }
@@ -1973,9 +2046,9 @@ class Utils
 
         // 再帰用クロージャ
         $vars = [];
-        $export = function ($value, $nest = 0) use (&$export, &$vars, $var_manager) {
-            $spacer0 = str_repeat(" ", 4 * ($nest + 0));
-            $spacer1 = str_repeat(" ", 4 * ($nest + 1));
+        $export = function ($value, $nest = 0, $raw = false) use (&$export, &$vars, $var_manager) {
+            $spacer0 = str_repeat(" ", 4 * max(0, $nest + 0));
+            $spacer1 = str_repeat(" ", 4 * max(0, $nest + 1));
             $raw_export = fn($v) => $v;
             $var_export = fn($v) => var_export($v, true);
             $neighborToken = function ($n, $d, $tokens) {
@@ -2040,6 +2113,33 @@ class Utils
                 $kvl = implode($middle, $kvl);
                 $declare = $vid ? "\$this->$vid = " : "";
                 return "{$declare}[$begin{$kvl}$end]";
+            }
+            if ($value instanceof \Generator) {
+                $ref = new \ReflectionGenerator($value);
+                $reffunc = $ref->getFunction();
+
+                if ($reffunc->getNumberOfRequiredParameters() > 0) {
+                    throw new \DomainException('required argument Generator is not support.');
+                }
+
+                $caller = null;
+                if ($reffunc instanceof \ReflectionFunction) {
+                    if ($reffunc->isClosure()) {
+                        $caller = "({$export($reffunc->getClosure(), $nest)})";
+                    }
+                    else {
+                        $caller = $reffunc->name;
+                    }
+                }
+                if ($reffunc instanceof \ReflectionMethod) {
+                    if ($reffunc->isStatic()) {
+                        $caller = "{$reffunc->class}::{$reffunc->name}";
+                    }
+                    else {
+                        $caller = "{$export($ref->getThis(), $nest)}->{$reffunc->name}";
+                    }
+                }
+                return "\$this->$vid = {$caller}()";
             }
             if ($value instanceof \Closure) {
                 $ref = new \ReflectionFunction($value);
@@ -2120,9 +2220,50 @@ class Utils
             if (is_object($value)) {
                 $ref = new \ReflectionObject($value);
 
-                // ジェネレータはどう頑張っても無理
-                if ($value instanceof \Generator) {
-                    throw new \DomainException('Generator Class is not support.');
+                // enum はリテラルを返せばよい
+                if ($value instanceof \UnitEnum) {
+                    $declare = "\\$ref->name::$value->name";
+                    if ($ref->getConstant($value->name) === $value) {
+                        return "\$this->$vid = $declare";
+                    }
+                    // enum の polyfill で、__callStatic を利用して疑似的にエミュレートしているライブラリは多い
+                    // もっとも、「多い」だけであり、そうとは限らないので値は見る必要はある（例外が飛ぶかもしれないので try も必要）
+                    if ($ref->hasMethod('__callStatic')) {
+                        try {
+                            if ($declare() === $value) {
+                                return "\$this->$vid = $declare()";
+                            }
+                        }
+                        catch (\Throwable $t) { // @codeCoverageIgnore
+                            // through. treat regular object
+                        }
+                    }
+                }
+
+                // 弱参照系は同時に渡ってきていれば復元できる
+                if ($value instanceof \WeakReference) {
+                    $weakreference = $value->get();
+                    if ($weakreference === null) {
+                        $weakreference = new \stdClass();
+                    }
+                    return "\$this->$vid = \\WeakReference::create({$export($weakreference, $nest)})";
+                }
+                if ($value instanceof \WeakMap) {
+                    $weakmap = "{$spacer1}\$this->$vid = new \\WeakMap();\n";
+                    foreach ($value as $object => $data) {
+                        $weakmap .= "{$spacer1}\$this->{$vid}[{$export($object)}] = {$export($data)};\n";
+                    }
+                    return "\$this->$vid = (function () {\n{$weakmap}{$spacer1}return \$this->$vid;\n$spacer0})->call(\$this)";
+                }
+
+                // 内部クラスで serialize 出来ないものは __PHP_Incomplete_Class で代替（復元時に無視する）
+                try {
+                    if ($ref->isInternal()) {
+                        serialize($value);
+                    }
+                }
+                catch (\Exception $e) {
+                    return "\$this->$vid = new \\__PHP_Incomplete_Class()";
                 }
 
                 // 無名クラスは定義がないのでパースが必要
@@ -2167,8 +2308,8 @@ class Utils
                             }
                         }
 
-                        // コンストラクタは呼ばないのでリネームしておく
-                        if ($token[1] === '__construct') {
+                        // 引数ありコンストラクタは呼ばないのでリネームしておく
+                        if ($token[1] === '__construct' && $ref->getConstructor() && $ref->getConstructor()->getNumberOfRequiredParameters()) {
                             $token[1] = "replaced__construct";
                         }
 
@@ -2189,6 +2330,9 @@ class Utils
                         'indent'   => $spacer1,
                         'baseline' => -1,
                     ]);
+                    if ($raw) {
+                        return $code;
+                    }
                     $classname = "(function () {\n{$spacer1}return $code;\n{$spacer0}})";
                 }
                 else {
@@ -2212,84 +2356,126 @@ class Utils
 
                 return "\$this->new(\$this->$vid, $classname, (function () {\n{$spacer1}return {$export([$fields, $privates], $nest + 1)};\n{$spacer0}}))";
             }
+            if (\ryunosuke\SimpleCache\Utils::is_resourcable($value)) {
+                // スタンダードなリソースなら復元できないこともない
+                $meta = stream_get_meta_data($value);
+                if (!in_array(strtolower($meta['stream_type']), ['stdio', 'output'], true)) {
+                    return 'null'; // for compatible. 例外にしたい
+                }
+                $meta['position'] = @ftell($value);
+                $meta['context'] = stream_context_get_options($value);
+                return "\$this->$vid = \$this->open({$export($meta, $nest + 1)})";
+            }
 
-            return is_null($value) || is_resource($value) ? 'null' : $var_export($value);
+            return is_null($value) ? 'null' : $var_export($value);
         };
 
         $exported = $export($value, 1);
-        $others = "";
+        $others = [];
         $vars = [];
         foreach ($var_manager->orphan() as $rid => [$isref, $vid, $var]) {
             $declare = $isref ? "&\$this->$vid" : $export($var, 1);
-            $others .= "    \$this->$rid = $declare;\n";
-        }
-        $result = "(function () {
-{$others}    return $exported;
-" . '})->call(new class() {
-    public function new(&$object, $class, $provider)
-    {
-        if ($class instanceof \\Closure) {
-            $object = $class();
-            $reflection = $this->reflect(get_class($object));
-        }
-        else {
-            $reflection = $this->reflect($class);
-            $object = $reflection["self"]->newInstanceWithoutConstructor();
-        }
-        [$fields, $privates] = $provider();
-
-        if ($reflection["unserialize"]) {
-            $object->__unserialize($fields);
-            return $object;
+            $others[] = "\$this->$rid = $declare;";
         }
 
-        foreach ($reflection["parents"] as $parent) {
-            foreach ($this->reflect($parent->name)["properties"] as $name => $property) {
-                if (isset($privates[$parent->name][$name])) {
-                    $property->setValue($object, $privates[$parent->name][$name]);
+        static $factory = null;
+        if ($factory === null) {
+            // @codeCoverageIgnoreStart
+            $factory = $export(new class() {
+                public function new(&$object, $class, $provider)
+                {
+                    if ($class instanceof \Closure) {
+                        $object = $class();
+                        $reflection = $this->reflect(get_class($object));
+                    }
+                    else {
+                        $reflection = $this->reflect($class);
+                        if ($reflection["constructor"] && $reflection["constructor"]->getNumberOfRequiredParameters() === 0) {
+                            $object = $reflection["self"]->newInstance();
+                        }
+                        else {
+                            $object = $reflection["self"]->newInstanceWithoutConstructor();
+                        }
+                    }
+                    [$fields, $privates] = $provider();
+
+                    if ($reflection["unserialize"]) {
+                        $object->__unserialize($fields);
+                        return $object;
+                    }
+
+                    foreach ($reflection["parents"] as $parent) {
+                        foreach ($this->reflect($parent->name)["properties"] as $name => $property) {
+                            if (isset($privates[$parent->name][$name]) && !$privates[$parent->name][$name] instanceof \__PHP_Incomplete_Class) {
+                                $property->setValue($object, $privates[$parent->name][$name]);
+                            }
+                            if ((isset($fields[$name]) || array_key_exists($name, $fields))) {
+                                if (!$fields[$name] instanceof \__PHP_Incomplete_Class) {
+                                    $property->setValue($object, $fields[$name]);
+                                }
+                                unset($fields[$name]);
+                            }
+                        }
+                    }
+                    foreach ($fields as $name => $value) {
+                        $object->$name = $value;
+                    }
+
+                    if ($reflection["wakeup"]) {
+                        $object->__wakeup();
+                    }
+
+                    return $object;
                 }
-                if (isset($fields[$name]) || array_key_exists($name, $fields)) {
-                    $property->setValue($object, $fields[$name]);
-                    unset($fields[$name]);
+
+                public function open($metadata)
+                {
+                    $resource = fopen($metadata['uri'], $metadata['mode'], false, stream_context_create($metadata['context']));
+                    if ($resource === false) {
+                        return null;
+                    }
+                    if ($metadata['seekable'] && is_int($metadata['position'])) {
+                        fseek($resource, $metadata['position']);
+                    }
+                    return $resource;
                 }
-            }
-        }
-        foreach ($fields as $name => $value) {
-            $object->$name = $value;
-        }
 
-        if ($reflection["wakeup"]) {
-            $object->__wakeup();
-        }
-
-        return $object;
-    }
-
-    private function reflect($class)
-    {
-        static $cache = [];
-        if (!isset($cache[$class])) {
-            $refclass = new \ReflectionClass($class);
-            $cache[$class] = [
-                "self"        => $refclass,
-                "parents"     => [],
-                "properties"  => [],
-                "unserialize" => $refclass->hasMethod("__unserialize"),
-                "wakeup"      => $refclass->hasMethod("__wakeup"),
-            ];
-            for ($current = $refclass; $current; $current = $current->getParentClass()) {
-                $cache[$class]["parents"][$current->name] = $current;
-            }
-            foreach ($refclass->getProperties() as $property) {
-                if (!$property->isStatic()) {
-                    $property->setAccessible(true);
-                    $cache[$class]["properties"][$property->name] = $property;
+                private function reflect($class)
+                {
+                    static $cache = [];
+                    if (!isset($cache[$class])) {
+                        $refclass = new \ReflectionClass($class);
+                        $cache[$class] = [
+                            "self"        => $refclass,
+                            "constructor" => $refclass->getConstructor(),
+                            "parents"     => [],
+                            "properties"  => [],
+                            "unserialize" => $refclass->hasMethod("__unserialize"),
+                            "wakeup"      => $refclass->hasMethod("__wakeup"),
+                        ];
+                        for ($current = $refclass; $current; $current = $current->getParentClass()) {
+                            $cache[$class]["parents"][$current->name] = $current;
+                        }
+                        foreach ($refclass->getProperties() as $property) {
+                            if (!$property->isStatic()) {
+                                $property->setAccessible(true);
+                                $cache[$class]["properties"][$property->name] = $property;
+                            }
+                        }
+                    }
+                    return $cache[$class];
                 }
-            }
+            }, -1, true);
+            // @codeCoverageIgnoreEnd
         }
-        return $cache[$class];
-    }
-})';
+
+        $E = fn($v) => $v;
+        $result = <<<PHP
+            (function () {
+                {$E(implode("\n    ", $others))}
+                return $exported;
+            })->call($factory)
+            PHP;
 
         if ($options['format'] === 'minify') {
             $tmp = tempnam(sys_get_temp_dir(), 've3');
