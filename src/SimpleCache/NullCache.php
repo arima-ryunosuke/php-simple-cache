@@ -2,6 +2,8 @@
 
 namespace ryunosuke\SimpleCache;
 
+use ArrayAccess;
+use ryunosuke\SimpleCache\Contract\ArrayAccessTrait;
 use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
@@ -11,10 +13,11 @@ use ryunosuke\SimpleCache\Contract\LockableInterface;
 use ryunosuke\SimpleCache\Contract\MultipleTrait;
 use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
 
-class NullCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface
+class NullCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface, ArrayAccess
 {
     use MultipleTrait;
     use FetchTrait;
+    use ArrayAccessTrait;
 
     private bool $enabledSlashKey;
     private bool $affectedReturnValue;

@@ -55,6 +55,26 @@ class StreamCacheTest extends AbstractTestCase
     /**
      * @dataProvider provideUrl
      */
+    function test_ArrayAccess($url, $options)
+    {
+        $cache = new StreamCache($url, $options);
+
+        $time = microtime(true);
+
+        $cache[$this->id] = 1;
+        $cache[$this->id] ??= sleep(10); // not call sleep
+
+        that(microtime(true) - $time)->lte(1);
+
+        that(isset($cache[$this->id]))->is(true);
+        that($cache[$this->id])->is(1);
+        unset($cache[$this->id]);
+        that(isset($cache[$this->id]))->is(false);
+    }
+
+    /**
+     * @dataProvider provideUrl
+     */
     function test_withNamespace($url, $options)
     {
         $cache    = new StreamCache($url, $options);

@@ -2,6 +2,8 @@
 
 namespace ryunosuke\SimpleCache;
 
+use ArrayAccess;
+use ryunosuke\SimpleCache\Contract\ArrayAccessTrait;
 use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
@@ -11,10 +13,11 @@ use ryunosuke\SimpleCache\Contract\LockableInterface;
 use ryunosuke\SimpleCache\Contract\SingleTrait;
 use Traversable;
 
-class ChainCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface
+class ChainCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface, ArrayAccess
 {
     use SingleTrait;
     use FetchTrait;
+    use ArrayAccessTrait;
 
     /** @var CacheInterface[] */
     private array $internals;

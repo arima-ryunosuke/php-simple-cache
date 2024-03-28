@@ -2,9 +2,11 @@
 
 namespace ryunosuke\SimpleCache;
 
+use ArrayAccess;
 use Exception;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use ryunosuke\SimpleCache\Contract\ArrayAccessTrait;
 use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
@@ -16,10 +18,11 @@ use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
 use ryunosuke\SimpleCache\Item\AbstractItem;
 use Throwable;
 
-class StreamCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface
+class StreamCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface, ArrayAccess
 {
     use MultipleTrait;
     use FetchTrait;
+    use ArrayAccessTrait;
 
     private string $directory;
     private string $defaultExtension;
