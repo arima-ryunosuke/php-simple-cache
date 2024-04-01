@@ -37,6 +37,19 @@ $cache->set('cache-key', 'Hello, world');
 var_dump($cache->get('cache-key', 'Hello, world')); // string(12) "Hello, world"
 ```
 
+ArrayAccess を実装しています。
+それ自体は特筆すべきではない実装ですが、ArrayAccess によって `??=` を利用した「あるなら取得、なかったら設定しつつ取得」が容易になります。
+
+```
+$cache = new \ryunosuke\SimpleCache\StreamCache('s3://bucket-name/savedir');
+// あるなら取得、なかったら設定しつつ取得
+$cache['cache-key'] ??= heavy_function();
+// つまり下記と同義です
+if (!$cache->has(['cache-key'])) {
+    $cache->set('cache-key', heavy_function());
+}
+```
+
 追加で下記のようなメソッドが生えています。
 
 - fetch: 取得を試みて、無かったらクロージャの返り値を格納しつつ返します
@@ -78,6 +91,10 @@ MIT
 - メジャー: 大規模な互換性破壊の際にアップします（アーキテクチャ、クラス構造の変更など）
 - マイナー: 小規模な互換性破壊の際にアップします（引数の変更、タイプヒントの追加など）
 - パッチ: 互換性破壊はありません（デフォルト引数の追加や、新たなクラスの追加、コードフォーマットなど）
+
+### 1.0.6
+
+- [feature] ArrayAccess を実装
 
 ### 1.0.5
 
