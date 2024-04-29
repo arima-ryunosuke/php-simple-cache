@@ -2,20 +2,18 @@
 
 namespace ryunosuke\SimpleCache;
 
-use ArrayAccess;
+use ryunosuke\SimpleCache\Contract\AllInterface;
 use ryunosuke\SimpleCache\Contract\ArrayAccessTrait;
 use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
-use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
-use ryunosuke\SimpleCache\Contract\HashableInterface;
 use ryunosuke\SimpleCache\Contract\HashTrait;
 use ryunosuke\SimpleCache\Contract\IterableInterface;
 use ryunosuke\SimpleCache\Contract\LockableInterface;
 use ryunosuke\SimpleCache\Contract\SingleTrait;
 use Traversable;
 
-class ChainCache implements CacheInterface, FetchableInterface, HashableInterface, LockableInterface, IterableInterface, CleanableInterface, ArrayAccess
+class ChainCache implements AllInterface
 {
     use SingleTrait;
     use FetchTrait;
