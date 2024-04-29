@@ -371,6 +371,73 @@ class StreamCacheTest extends AbstractTestCase
     /**
      * @dataProvider provideUrl
      */
+    function test_hash($url, $options)
+    {
+        $cache = new StreamCache($url, $options);
+
+        $invalidPrefix = '{}()\\@:';
+        that($cache)->___hashClosure = fn() => 'hoge';
+
+        that($cache)->hasByHash("$invalidPrefix.$this->id/hoge")->isFalse();
+        that($cache)->setByHash("$invalidPrefix.$this->id/hoge", 'Hoge')->isTrue();
+        that($cache)->getByHash("$invalidPrefix.$this->id/hoge")->is('Hoge');
+        that($cache)->setByHash("$invalidPrefix.$this->id/fuga", 'Fuga', 0)->isTrue();
+        that($cache)->deleteByHash("$invalidPrefix.$this->id/hoge")->isTrue();
+        that($cache)->hasByHash("$invalidPrefix.$this->id/hoge")->isFalse();
+        that($cache)->has('hoge')->isFalse();
+
+        that($cache)->setMultipleByHash([
+            "$invalidPrefix.$this->id/x" => 'X',
+            "$invalidPrefix.$this->id/y" => 'Y',
+            "$invalidPrefix.$this->id/z" => 'Z',
+        ])->isTrue();
+        that($cache)->getMultipleByHash([
+            "$invalidPrefix.$this->id/x",
+            "$invalidPrefix.$this->id/y",
+            "$invalidPrefix.$this->id/z",
+        ])->is([
+            "$invalidPrefix.$this->id/x" => 'X',
+            "$invalidPrefix.$this->id/y" => 'Y',
+            "$invalidPrefix.$this->id/z" => 'Z',
+        ]);
+
+        that($cache)->setMultipleByHash([
+            "$invalidPrefix.$this->id/x" => 'X1',
+        ], 1)->isTrue();
+        that($cache)->getMultipleByHash([
+            "$invalidPrefix.$this->id/x",
+            "$invalidPrefix.$this->id/y",
+            "$invalidPrefix.$this->id/z",
+        ])->is([
+            "$invalidPrefix.$this->id/x" => 'X1',
+            "$invalidPrefix.$this->id/y" => 'Y',
+            "$invalidPrefix.$this->id/z" => 'Z',
+        ]);
+
+        sleep(2);
+        that($cache)->getMultipleByHash([
+            "$invalidPrefix.$this->id/x",
+            "$invalidPrefix.$this->id/y",
+            "$invalidPrefix.$this->id/z",
+        ], 'nothing')->is([
+            "$invalidPrefix.$this->id/x" => 'nothing',
+            "$invalidPrefix.$this->id/y" => 'Y',
+            "$invalidPrefix.$this->id/z" => 'Z',
+        ]);
+
+        that($cache)->deleteMultipleByHash([
+            "$invalidPrefix.$this->id/y",
+        ])->isTrue();
+        that($cache)->has('hoge')->isTrue();
+        that($cache)->deleteMultipleByHash([
+            "$invalidPrefix.$this->id/z",
+        ])->isTrue();
+        that($cache)->has('hoge')->isFalse();
+    }
+
+    /**
+     * @dataProvider provideUrl
+     */
     function test_clear($url, $options)
     {
         $cache = new StreamCache($url, $options);

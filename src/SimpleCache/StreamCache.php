@@ -11,6 +11,8 @@ use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
+use ryunosuke\SimpleCache\Contract\HashableInterface;
+use ryunosuke\SimpleCache\Contract\HashTrait;
 use ryunosuke\SimpleCache\Contract\IterableInterface;
 use ryunosuke\SimpleCache\Contract\LockableInterface;
 use ryunosuke\SimpleCache\Contract\MultipleTrait;
@@ -18,10 +20,11 @@ use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
 use ryunosuke\SimpleCache\Item\AbstractItem;
 use Throwable;
 
-class StreamCache implements CacheInterface, FetchableInterface, LockableInterface, IterableInterface, CleanableInterface, ArrayAccess
+class StreamCache implements CacheInterface, FetchableInterface, HashableInterface, LockableInterface, IterableInterface, CleanableInterface, ArrayAccess
 {
     use MultipleTrait;
     use FetchTrait;
+    use HashTrait;
     use ArrayAccessTrait;
 
     private string $directory;
@@ -70,6 +73,8 @@ class StreamCache implements CacheInterface, FetchableInterface, LockableInterfa
             'php'           => \ryunosuke\SimpleCache\Item\PhpItem::class,
             'php-serialize' => \ryunosuke\SimpleCache\Item\SerializationItem::class,
         ];
+
+        $this->___defaultTtl = $this->defaultTtl;
 
         $this->items    = [];
         $this->cachemap = [];
@@ -193,7 +198,7 @@ class StreamCache implements CacheInterface, FetchableInterface, LockableInterfa
             $this->lockings[$filename] = fopen($filename, 'c');
         }
         try {
-            $start  = microtime(true);
+            $start = microtime(true);
             while ((microtime(true) - $start) < 10) {
                 $locked = flock($this->lockings[$filename], $operation);
                 if ($locked || $this->lockSecond === 0.0) {
