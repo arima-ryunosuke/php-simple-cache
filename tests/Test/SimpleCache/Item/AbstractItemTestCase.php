@@ -24,7 +24,7 @@ abstract class AbstractItemTestCase extends AbstractTestCase
 
     function test_size()
     {
-        $path = 'file://' . sys_get_temp_dir() . "/$this->id";
+        $path  = 'file://' . sys_get_temp_dir() . "/$this->id";
         $item1 = new static::$testClass($path);
         $item2 = new static::$testClass($path);
         $item3 = new static::$testClass($path);

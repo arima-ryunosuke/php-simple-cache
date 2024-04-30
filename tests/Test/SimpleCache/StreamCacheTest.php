@@ -375,7 +375,7 @@ class StreamCacheTest extends AbstractTestCase
     {
         $cache = new StreamCache($url, $options);
 
-        $invalidPrefix = '{}()\\@:';
+        $invalidPrefix               = '{}()\\@:';
         that($cache)->___hashClosure = fn() => 'hoge';
 
         that($cache)->hasByHash("$invalidPrefix.$this->id/hoge")->isFalse();
