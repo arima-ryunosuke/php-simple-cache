@@ -2,9 +2,9 @@
 
 namespace ryunosuke\SimpleCache;
 
+use Psr\SimpleCache\CacheInterface;
 use ryunosuke\SimpleCache\Contract\AllInterface;
 use ryunosuke\SimpleCache\Contract\ArrayAccessTrait;
-use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\CleanableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
 use ryunosuke\SimpleCache\Contract\HashTrait;

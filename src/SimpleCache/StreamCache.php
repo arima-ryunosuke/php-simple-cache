@@ -54,7 +54,7 @@ class StreamCache implements AllInterface
                 mkdir($directory, 0777, true);
                 return is_dir($directory);
             }
-            catch (Throwable $t) {
+            catch (Throwable) {
                 return false;
             }
         })($this->directory);
@@ -109,7 +109,7 @@ class StreamCache implements AllInterface
     // <editor-fold desc="CacheInterface">
 
     /** @inheritdoc */
-    public function get($key, $default = null)
+    public function get($key, $default = null): mixed
     {
         $item = $this->items[$key] ??= $this->createItem($this->_filename($key));
 
@@ -240,7 +240,7 @@ class StreamCache implements AllInterface
                 }
             }
         }
-        catch (Exception $e) {
+        catch (Exception) {
             // if $this->directory is stream wrapper, not use file_exists/id_dir/other stat function.
             // because that is implementation-dependent, it may even throw an exception.
         }

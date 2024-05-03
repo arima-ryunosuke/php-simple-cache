@@ -2,8 +2,8 @@
 
 namespace ryunosuke\Test\SimpleCache;
 
+use Psr\SimpleCache\CacheInterface;
 use ryunosuke\SimpleCache\ChainCache;
-use ryunosuke\SimpleCache\Contract\CacheInterface;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
 use ryunosuke\SimpleCache\Contract\MultipleTrait;
@@ -89,7 +89,7 @@ class ChainCacheTest extends AbstractTestCase
             use MultipleTrait;
             use FetchTrait;
 
-            public function get($key, $default = null) { return $default; }
+            public function get($key, $default = null): mixed { return $default; }
 
             public function set($key, $value, $ttl = null): bool { return true; }
 

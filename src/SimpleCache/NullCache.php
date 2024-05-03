@@ -28,7 +28,7 @@ class NullCache implements AllInterface
     // <editor-fold desc="CacheInterface">
 
     /** @inheritdoc */
-    public function get($key, $default = null)
+    public function get($key, $default = null): mixed
     {
         InvalidArgumentException::normalizeKeyOrThrow($key, $this->enabledSlashKey);
 

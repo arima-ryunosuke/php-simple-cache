@@ -45,7 +45,7 @@ class PhpItem extends AbstractItem
         try {
             $string = VarExporter::export($value);
         }
-        catch (NotInstantiableTypeException $e) {
+        catch (NotInstantiableTypeException) {
             $string = Utils::var_export3($value, true);
         }
 
@@ -79,7 +79,7 @@ class PhpItem extends AbstractItem
                 yield from [[], null];
             }
         }
-        catch (ErrorException $e) {
+        catch (ErrorException) {
             // race condition: e.g. S3 errors if file does not exists
             yield from [[], null];
         }

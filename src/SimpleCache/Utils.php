@@ -9,7 +9,7 @@ namespace ryunosuke\SimpleCache;
  */
 class Utils
 {
-    public const TOKEN_NAME = 2;
+
 
     /**
      * 全要素が true になるなら true を返す（1つでも false なら false を返す）
@@ -147,7 +147,7 @@ class Utils
      * @param iterable $array 調べる配列
      * @param callable $callback 評価コールバック
      * @param bool $is_key キーを返すか否か
-     * @return mixed コールバックが true を返した最初のキー。存在しなかったら false
+     * @return mixed コールバックが true を返した最初のキー。存在しなかったら null
      */
     public static function array_find($array, $callback, $is_key = true)
     {
@@ -163,7 +163,7 @@ class Utils
                 return $result;
             }
         }
-        return false;
+        return null;
     }
 
     /**
@@ -318,14 +318,14 @@ class Utils
      * // var_dump((array) $object);
      *
      * // この関数を使えば不可視プロパティも取得できる
-     * that(get_object_properties($object))->subsetEquals([
+     * that(object_properties($object))->subsetEquals([
      *     'message' => 'something',
      *     'code'    => 42,
      *     'oreore'  => 'oreore',
      * ]);
      *
      * // クロージャは this と use 変数を返す
-     * that(get_object_properties(fn() => $object))->is([
+     * that(object_properties(fn() => $object))->is([
      *     'this'   => $this,
      *     'object' => $object,
      * ]);
@@ -337,7 +337,7 @@ class Utils
      * @param array $privates 継承ツリー上の private が格納される
      * @return array 全プロパティの配列
      */
-    public static function get_object_properties($object, &$privates = [])
+    public static function object_properties($object, &$privates = [])
     {
         if ($object instanceof \Closure) {
             $ref = new \ReflectionFunction($object);
@@ -378,69 +378,6 @@ class Utils
     }
 
     /**
-     * 指定 callable を指定クロージャで実行するクロージャを返す
-     *
-     * ほぼ内部向けで外から呼ぶことはあまり想定していない。
-     *
-     * @package ryunosuke\Functions\Package\funchand
-     *
-     * @param \Closure $invoker クロージャを実行するためのクロージャ（実処理）
-     * @param callable $callable 最終的に実行したいクロージャ
-     * @param ?int $arity 引数の数
-     * @return callable $callable を実行するクロージャ
-     */
-    public static function delegate($invoker, $callable, $arity = null)
-    {
-        $arity ??= \ryunosuke\SimpleCache\Utils::parameter_length($callable, true, true);
-
-        if (\ryunosuke\SimpleCache\Utils::reflect_callable($callable)->isInternal()) {
-            static $cache = [];
-            $cache[(string) $arity] ??= \ryunosuke\SimpleCache\Utils::evaluate('return new class()
-            {
-                private $invoker, $callable;
-
-                public function spawn($invoker, $callable)
-                {
-                    $that = clone($this);
-                    $that->invoker = $invoker;
-                    $that->callable = $callable;
-                    return $that;
-                }
-
-                public function __invoke(' . implode(',', is_infinite($arity)
-                    ? ['...$_']
-                    : array_map(fn($v) => '$_' . $v, array_keys(array_fill(1, $arity, null)))
-                ) . ')
-                {
-                    return ($this->invoker)($this->callable, func_get_args());
-                }
-            };');
-            return $cache[(string) $arity]->spawn($invoker, $callable);
-        }
-
-        switch (true) {
-            case $arity === 0:
-                return fn() => $invoker($callable, func_get_args());
-            case $arity === 1:
-                return fn($_1) => $invoker($callable, func_get_args());
-            case $arity === 2:
-                return fn($_1, $_2) => $invoker($callable, func_get_args());
-            case $arity === 3:
-                return fn($_1, $_2, $_3) => $invoker($callable, func_get_args());
-            case $arity === 4:
-                return fn($_1, $_2, $_3, $_4) => $invoker($callable, func_get_args());
-            case $arity === 5:
-                return fn($_1, $_2, $_3, $_4, $_5) => $invoker($callable, func_get_args());
-            case is_infinite($arity):
-                return fn(...$_) => $invoker($callable, func_get_args());
-            default:
-                $args = implode(',', array_map(fn($v) => '$_' . $v, array_keys(array_fill(1, $arity, null))));
-                $stmt = 'return function (' . $args . ') use ($invoker, $callable) { return $invoker($callable, func_get_args()); };';
-                return eval($stmt);
-        }
-    }
-
-    /**
      * パラメータ定義数に応じて呼び出し引数を可変にしてコールする
      *
      * デフォルト引数はカウントされない。必須パラメータの数で呼び出す。
@@ -477,12 +414,12 @@ class Utils
 
         // 上記以外は「引数ぴったりで削ぎ落としてコールするクロージャ」を返す
         $plength = \ryunosuke\SimpleCache\Utils::parameter_length($callback, true, true);
-        return \ryunosuke\SimpleCache\Utils::delegate(function ($callback, $args) use ($plength) {
+        return function (...$args) use ($callback, $plength) {
             if (is_infinite($plength)) {
                 return $callback(...$args);
             }
             return $callback(...array_slice($args, 0, $plength));
-        }, $callback, $plength);
+        };
     }
 
     /**
@@ -502,222 +439,6 @@ class Utils
     public static function is_bindable_closure(\Closure $closure)
     {
         return !!@$closure->bindTo(new \stdClass());
-    }
-
-    /**
-     * eval のプロキシ関数
-     *
-     * 一度ファイルに吐いてから require した方が opcache が効くので抜群に速い。
-     * また、素の eval は ParseError が起こったときの表示がわかりにくすぎるので少し見やすくしてある。
-     *
-     * 関数化してる以上 eval におけるコンテキストの引き継ぎはできない。
-     * ただし、引数で変数配列を渡せるようにしてあるので get_defined_vars を併用すれば基本的には同じ（$this はどうしようもない）。
-     *
-     * 短いステートメントだと opcode が少ないのでファイルを経由せず直接 eval したほうが速いことに留意。
-     * 一応引数で指定できるようにはしてある。
-     *
-     * Example:
-     * ```php
-     * $a = 1;
-     * $b = 2;
-     * $phpcode = ';
-     * $c = $a + $b;
-     * return $c * 3;
-     * ';
-     * that(evaluate($phpcode, get_defined_vars()))->isSame(9);
-     * ```
-     *
-     * @package ryunosuke\Functions\Package\misc
-     *
-     * @param string $phpcode 実行する php コード
-     * @param array $contextvars コンテキスト変数配列
-     * @param int $cachesize キャッシュするサイズ
-     * @return mixed eval の return 値
-     */
-    public static function evaluate($phpcode, $contextvars = [], $cachesize = 256)
-    {
-        $cachefile = null;
-        if ($cachesize && strlen($phpcode) >= $cachesize) {
-            $cachefile = \ryunosuke\SimpleCache\Utils::function_configure('storagedir') . '/' . rawurlencode(__FUNCTION__) . '-' . sha1($phpcode) . '.php';
-            if (!file_exists($cachefile)) {
-                file_put_contents($cachefile, "<?php $phpcode", LOCK_EX);
-            }
-        }
-
-        try {
-            if ($cachefile) {
-                /** @noinspection PhpMethodParametersCountMismatchInspection */
-                return (static function () {
-                    extract(func_get_arg(1));
-                    return require func_get_arg(0);
-                })($cachefile, $contextvars);
-            }
-            else {
-                /** @noinspection PhpMethodParametersCountMismatchInspection */
-                return (static function () {
-                    extract(func_get_arg(1));
-                    return eval(func_get_arg(0));
-                })($phpcode, $contextvars);
-            }
-        }
-        catch (\ParseError $ex) {
-            $errline = $ex->getLine();
-            $errline_1 = $errline - 1;
-            $codes = preg_split('#\\R#u', $phpcode);
-            $codes[$errline_1] = '>>> ' . $codes[$errline_1];
-
-            $N = 5; // 前後の行数
-            $message = $ex->getMessage();
-            $message .= "\n" . implode("\n", array_slice($codes, max(0, $errline_1 - $N), $N * 2 + 1));
-            if ($cachefile) {
-                $message .= "\n in " . realpath($cachefile) . " on line " . $errline . "\n";
-            }
-            throw new \ParseError($message, $ex->getCode(), $ex);
-        }
-    }
-
-    /**
-     * php のコードのインデントを調整する
-     *
-     * baseline で基準インデント位置を指定する。
-     * その基準インデントを削除した後、指定したインデントレベルでインデントするようなイメージ。
-     *
-     * Example:
-     * ```php
-     * $phpcode = '
-     *     echo 123;
-     *
-     *     if (true) {
-     *         echo 456;
-     *     }
-     * ';
-     * // 数値指定は空白換算
-     * that(indent_php($phpcode, 8))->isSame('
-     *         echo 123;
-     *
-     *         if (true) {
-     *             echo 456;
-     *         }
-     * ');
-     * // 文字列を指定すればそれが使用される
-     * that(indent_php($phpcode, "  "))->isSame('
-     *   echo 123;
-     *
-     *   if (true) {
-     *       echo 456;
-     *   }
-     * ');
-     * // オプション指定
-     * that(indent_php($phpcode, [
-     *     'baseline'  => 1,    // 基準インデントの行番号（負数で下からの指定になる）
-     *     'indent'    => 4,    // インデント指定（上記の数値・文字列指定はこれの糖衣構文）
-     *     'trimempty' => true, // 空行を trim するか
-     *     'heredoc'   => true, // Flexible Heredoc もインデントするか
-     * ]))->isSame('
-     *     echo 123;
-     *
-     *     if (true) {
-     *         echo 456;
-     *     }
-     * ');
-     * ```
-     *
-     * @package ryunosuke\Functions\Package\misc
-     *
-     * @param string $phpcode インデントする php コード
-     * @param array|int|string $options オプション
-     * @return string インデントされた php コード
-     */
-    public static function indent_php($phpcode, $options = [])
-    {
-        if (!is_array($options)) {
-            $options = ['indent' => $options];
-        }
-        $options += [
-            'baseline'  => 1,
-            'indent'    => 0,
-            'trimempty' => true,
-            'heredoc'   => true,
-        ];
-        if (is_int($options['indent'])) {
-            $options['indent'] = str_repeat(' ', $options['indent']);
-        }
-
-        $lines = preg_split('#\\R#u', $phpcode);
-        $baseline = $options['baseline'];
-        if ($baseline < 0) {
-            $baseline = count($lines) + $baseline;
-        }
-        preg_match('@^[ \t]*@u', $lines[$baseline] ?? '', $matches);
-        $indent = $matches[0] ?? '';
-
-        $tmp = token_get_all("<?php $phpcode");
-        array_shift($tmp);
-
-        // トークンの正規化
-        $tokens = [];
-        for ($i = 0; $i < count($tmp); $i++) {
-            if (is_string($tmp[$i])) {
-                $tmp[$i] = [-1, $tmp[$i], null];
-            }
-
-            // 行コメントの分割（T_COMMENT には改行が含まれている）
-            if ($tmp[$i][0] === T_COMMENT && preg_match('@^(#|//).*?(\\R)@um', $tmp[$i][1], $matches)) {
-                $tmp[$i][1] = trim($tmp[$i][1]);
-                if (($tmp[$i + 1][0] ?? null) === T_WHITESPACE) {
-                    $tmp[$i + 1][1] = $matches[2] . $tmp[$i + 1][1];
-                }
-                else {
-                    array_splice($tmp, $i + 1, 0, [[T_WHITESPACE, $matches[2], null]]);
-                }
-            }
-
-            if ($options['heredoc']) {
-                // 行コメントと同じ（T_START_HEREDOC には改行が含まれている）
-                if ($tmp[$i][0] === T_START_HEREDOC && preg_match('@^(<<<).*?(\\R)@um', $tmp[$i][1], $matches)) {
-                    $tmp[$i][1] = trim($tmp[$i][1]);
-                    if (($tmp[$i + 1][0] ?? null) === T_ENCAPSED_AND_WHITESPACE) {
-                        $tmp[$i + 1][1] = $matches[2] . $tmp[$i + 1][1];
-                    }
-                    else {
-                        array_splice($tmp, $i + 1, 0, [[T_ENCAPSED_AND_WHITESPACE, $matches[2], null]]);
-                    }
-                }
-                // php 7.3 において T_END_HEREDOC は必ず単一行になる
-                if ($tmp[$i][0] === T_ENCAPSED_AND_WHITESPACE) {
-                    if (($tmp[$i + 1][0] ?? null) === T_END_HEREDOC && preg_match('@^(\\s+)(.*)@um', $tmp[$i + 1][1], $matches)) {
-                        $tmp[$i][1] = $tmp[$i][1] . $matches[1];
-                        $tmp[$i + 1][1] = $matches[2];
-                    }
-                }
-            }
-
-            $tokens[] = $tmp[$i] + [3 => token_name($tmp[$i][0])];
-        }
-
-        // 改行を置換してインデント
-        $hereing = false;
-        foreach ($tokens as $i => $token) {
-            if ($options['heredoc']) {
-                if ($token[0] === T_START_HEREDOC) {
-                    $hereing = true;
-                }
-                if ($token[0] === T_END_HEREDOC) {
-                    $hereing = false;
-                }
-            }
-            if (in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true) || ($hereing && $token[0] === T_ENCAPSED_AND_WHITESPACE)) {
-                $token[1] = preg_replace("@(\\R)$indent@um", '$1' . $options['indent'], $token[1]);
-            }
-            if ($options['trimempty']) {
-                if ($token[0] === T_WHITESPACE) {
-                    $token[1] = preg_replace("@(\\R)[ \\t]+(\\R)@um", '$1$2', $token[1]);
-                }
-            }
-
-            $tokens[$i] = $token;
-        }
-        return implode('', array_column($tokens, 1));
     }
 
     /**
@@ -744,7 +465,7 @@ class Utils
      * const InnerConst = 123;
      * ');
      * // このような名前空間配列が得られる
-     * that(parse_namespace(sys_get_temp_dir() . '/namespace.php'))->isSame([
+     * that(namespace_parse(sys_get_temp_dir() . '/namespace.php'))->isSame([
      *     'NS1' => [
      *         'const'    => [],
      *         'function' => [
@@ -783,7 +504,7 @@ class Utils
      * @param array $options オプション配列
      * @return array 名前空間配列
      */
-    public static function parse_namespace($filename, $options = [])
+    public static function namespace_parse($filename, $options = [])
     {
         $filename = realpath($filename);
         $filemtime = filemtime($filename);
@@ -799,21 +520,13 @@ class Utils
         }
         return \ryunosuke\SimpleCache\Utils::cache($filename, function () use ($filename) {
             $stringify = function ($tokens) {
-                // @codeCoverageIgnoreStart
-                if (version_compare(PHP_VERSION, '8.0.0') >= 0) {
-                    return trim(implode('', array_column(array_filter($tokens, function ($token) {
-                        /** @noinspection PhpElementIsNotAvailableInCurrentPhpVersionInspection */
-                        return in_array($token[0], [T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STRING], true);
-                    }), 1)), '\\');
-                }
-                // @codeCoverageIgnoreEnd
                 return trim(implode('', array_column(array_filter($tokens, function ($token) {
-                    return $token[0] === T_NS_SEPARATOR || $token[0] === T_STRING;
-                }), 1)), '\\');
+                    return in_array($token->id, [T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STRING], true);
+                }), 'text')), '\\');
             };
 
             $keys = [
-                0           => 'alias', // for use
+                null        => 'alias', // for use
                 T_CLASS     => 'alias',
                 T_INTERFACE => 'alias',
                 T_TRAIT     => 'alias',
@@ -822,12 +535,12 @@ class Utils
                 T_FUNCTION  => 'function',
             ];
 
-            $contents = "?>" . file_get_contents($filename);
+            $contents = file_get_contents($filename);
             $namespace = '';
             $tokens = [-1 => null];
             $result = [];
             while (true) {
-                $tokens = \ryunosuke\SimpleCache\Utils::parse_php($contents, [
+                $tokens = \ryunosuke\SimpleCache\Utils::php_parse($contents, [
                     'flags'  => TOKEN_PARSE,
                     'begin'  => ["define", T_NAMESPACE, T_USE, T_CONST, T_FUNCTION, T_CLASS, T_INTERFACE, T_TRAIT],
                     'end'    => ['{', ';', '(', T_EXTENDS, T_IMPLEMENTS],
@@ -838,14 +551,14 @@ class Utils
                 }
                 $token = reset($tokens);
                 // define は現在の名前空間とは無関係に名前空間定数を宣言することができる
-                if ($token[0] === T_STRING && $token[1] === "define") {
-                    $tokens = \ryunosuke\SimpleCache\Utils::parse_php($contents, [
+                if ($token->id === T_STRING && $token->text === "define") {
+                    $tokens = \ryunosuke\SimpleCache\Utils::php_parse($contents, [
                         'flags'  => TOKEN_PARSE,
                         'begin'  => [T_CONSTANT_ENCAPSED_STRING],
                         'end'    => [T_CONSTANT_ENCAPSED_STRING],
                         'offset' => \ryunosuke\SimpleCache\Utils::last_key($tokens),
                     ]);
-                    $cname = substr(implode('', array_column($tokens, 1)), 1, -1);
+                    $cname = substr(implode('', array_column($tokens, 'text')), 1, -1);
                     $define = trim(json_decode("\"$cname\""), '\\');
                     [$ns, $nm] = \ryunosuke\SimpleCache\Utils::namespace_split($define);
                     if (!isset($result[$ns])) {
@@ -855,9 +568,9 @@ class Utils
                             'alias'    => [],
                         ];
                     }
-                    $result[$ns][$keys[$token[0]]][$nm] = $define;
+                    $result[$ns][$keys[$token->id]][$nm] = $define;
                 }
-                switch ($token[0]) {
+                switch ($token->id) {
                     case T_NAMESPACE:
                         $namespace = $stringify($tokens);
                         $result[$namespace] = [
@@ -867,12 +580,12 @@ class Utils
                         ];
                         break;
                     case T_USE:
-                        $tokenCorF = \ryunosuke\SimpleCache\Utils::array_find($tokens, fn($token) => ($token[0] === T_CONST || $token[0] === T_FUNCTION) ? $token[0] : 0, false);
+                        $tokenCorF = \ryunosuke\SimpleCache\Utils::array_find($tokens, fn($token) => ($token->id === T_CONST || $token->id === T_FUNCTION) ? $token->id : 0, false);
 
                         $prefix = '';
-                        if (end($tokens)[1] === '{') {
+                        if (end($tokens)->text === '{') {
                             $prefix = $stringify($tokens);
-                            $tokens = \ryunosuke\SimpleCache\Utils::parse_php($contents, [
+                            $tokens = \ryunosuke\SimpleCache\Utils::php_parse($contents, [
                                 'flags'  => TOKEN_PARSE,
                                 'begin'  => ['{'],
                                 'end'    => ['}'],
@@ -880,9 +593,9 @@ class Utils
                             ]);
                         }
 
-                        $multi = \ryunosuke\SimpleCache\Utils::array_explode($tokens, fn($token) => $token[1] === ',');
+                        $multi = \ryunosuke\SimpleCache\Utils::array_explode($tokens, fn($token) => $token->text === ',');
                         foreach ($multi as $ttt) {
-                            $as = \ryunosuke\SimpleCache\Utils::array_explode($ttt, fn($token) => $token[0] === T_AS);
+                            $as = \ryunosuke\SimpleCache\Utils::array_explode($ttt, fn($token) => $token->id === T_AS);
 
                             $alias = $stringify($as[0]);
                             if (isset($as[1])) {
@@ -900,11 +613,11 @@ class Utils
                     case T_TRAIT:
                         $alias = $stringify($tokens);
                         if (strlen($alias)) {
-                            $result[$namespace][$keys[$token[0]]][$alias] = \ryunosuke\SimpleCache\Utils::concat($namespace, '\\') . $alias;
+                            $result[$namespace][$keys[$token->id]][$alias] = \ryunosuke\SimpleCache\Utils::concat($namespace, '\\') . $alias;
                         }
                         // ブロック内に興味はないので進めておく（function 内 function などはあり得るが考慮しない）
-                        if ($token[0] !== T_CONST) {
-                            $tokens = \ryunosuke\SimpleCache\Utils::parse_php($contents, [
+                        if ($token->id !== T_CONST) {
+                            $tokens = \ryunosuke\SimpleCache\Utils::php_parse($contents, [
                                 'flags'  => TOKEN_PARSE,
                                 'begin'  => ['{'],
                                 'end'    => ['}'],
@@ -919,58 +632,250 @@ class Utils
     }
 
     /**
+     * エイリアス名を完全修飾名に解決する
+     *
+     * 例えばあるファイルのある名前空間で `use Hoge\Fuga\Piyo;` してるときの `Piyo` を `Hoge\Fuga\Piyo` に解決する。
+     *
+     * Example:
+     * ```php
+     * // このような php ファイルがあるとして・・・
+     * file_set_contents(sys_get_temp_dir() . '/symbol.php', '
+     * <?php
+     * namespace vendor\NS;
+     *
+     * use ArrayObject as AO;
+     * use function strlen as SL;
+     *
+     * function InnerFunc(){}
+     * class InnerClass{}
+     * ');
+     * // 下記のように解決される
+     * that(namespace_resolve('AO', sys_get_temp_dir() . '/symbol.php'))->isSame('ArrayObject');
+     * that(namespace_resolve('SL', sys_get_temp_dir() . '/symbol.php'))->isSame('strlen');
+     * that(namespace_resolve('InnerFunc', sys_get_temp_dir() . '/symbol.php'))->isSame('vendor\\NS\\InnerFunc');
+     * that(namespace_resolve('InnerClass', sys_get_temp_dir() . '/symbol.php'))->isSame('vendor\\NS\\InnerClass');
+     * ```
+     *
+     * @package ryunosuke\Functions\Package\misc
+     *
+     * @param string $shortname エイリアス名
+     * @param string|array $nsfiles ファイル名 or [ファイル名 => 名前空間名]
+     * @param array $targets エイリアスタイプ（'const', 'function', 'alias' のいずれか）
+     * @return string|null 完全修飾名。解決できなかった場合は null
+     */
+    public static function namespace_resolve(string $shortname, $nsfiles, $targets = ['const', 'function', 'alias'])
+    {
+        // 既に完全修飾されている場合は何もしない
+        if (($shortname[0] ?? null) === '\\') {
+            return $shortname;
+        }
+
+        // use Inner\Space のような名前空間の use の場合を考慮する
+        $parts = explode('\\', $shortname, 2);
+        $prefix = isset($parts[1]) ? array_shift($parts) : null;
+
+        if (is_string($nsfiles)) {
+            $nsfiles = [$nsfiles => []];
+        }
+
+        $targets = (array) $targets;
+        foreach ($nsfiles as $filename => $namespaces) {
+            $namespaces = array_flip(array_map(fn($n) => trim($n, '\\'), (array) $namespaces));
+            foreach (\ryunosuke\SimpleCache\Utils::namespace_parse($filename) as $namespace => $ns) {
+                /** @noinspection PhpIllegalArrayKeyTypeInspection */
+                if (!$namespaces || isset($namespaces[$namespace])) {
+                    if (isset($ns['alias'][$prefix])) {
+                        return $ns['alias'][$prefix] . '\\' . implode('\\', $parts);
+                    }
+                    foreach ($targets as $target) {
+                        if (isset($ns[$target][$shortname])) {
+                            return $ns[$target][$shortname];
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * php のコードのインデントを調整する
+     *
+     * baseline で基準インデント位置を指定する。
+     * その基準インデントを削除した後、指定したインデントレベルでインデントするようなイメージ。
+     *
+     * Example:
+     * ```php
+     * $phpcode = '
+     *     echo 123;
+     *
+     *     if (true) {
+     *         echo 456;
+     *     }
+     * ';
+     * // 数値指定は空白換算
+     * that(php_indent($phpcode, 8))->isSame('
+     *         echo 123;
+     *
+     *         if (true) {
+     *             echo 456;
+     *         }
+     * ');
+     * // 文字列を指定すればそれが使用される
+     * that(php_indent($phpcode, "  "))->isSame('
+     *   echo 123;
+     *
+     *   if (true) {
+     *       echo 456;
+     *   }
+     * ');
+     * // オプション指定
+     * that(php_indent($phpcode, [
+     *     'baseline'  => 1,    // 基準インデントの行番号（負数で下からの指定になる）
+     *     'indent'    => 4,    // インデント指定（上記の数値・文字列指定はこれの糖衣構文）
+     *     'trimempty' => true, // 空行を trim するか
+     *     'heredoc'   => true, // Flexible Heredoc もインデントするか
+     * ]))->isSame('
+     *     echo 123;
+     *
+     *     if (true) {
+     *         echo 456;
+     *     }
+     * ');
+     * ```
+     *
+     * @package ryunosuke\Functions\Package\misc
+     *
+     * @param string $phpcode インデントする php コード
+     * @param array|int|string $options オプション
+     * @return string インデントされた php コード
+     */
+    public static function php_indent($phpcode, $options = [])
+    {
+        if (!is_array($options)) {
+            $options = ['indent' => $options];
+        }
+        $options += [
+            'baseline'  => 1,
+            'indent'    => 0,
+            'trimempty' => true,
+            'heredoc'   => true,
+        ];
+        if (is_int($options['indent'])) {
+            $options['indent'] = str_repeat(' ', $options['indent']);
+        }
+
+        $lines = preg_split('#\\R#u', $phpcode);
+        $baseline = $options['baseline'];
+        if ($baseline < 0) {
+            $baseline = count($lines) + $baseline;
+        }
+        preg_match('@^[ \t]*@u', $lines[$baseline] ?? '', $matches);
+        $indent = $matches[0] ?? '';
+
+        $tmp = \PhpToken::tokenize("<?php $phpcode");
+        array_shift($tmp);
+
+        // トークンの正規化
+        $tokens = [];
+        for ($i = 0; $i < count($tmp); $i++) {
+            if ($options['heredoc']) {
+                // 行コメントと同じ（T_START_HEREDOC には改行が含まれている）
+                if ($tmp[$i]->id === T_START_HEREDOC && preg_match('@^(<<<).*?(\\R)@um', $tmp[$i]->text, $matches)) {
+                    $tmp[$i]->text = trim($tmp[$i]->text);
+                    if (($tmp[$i + 1]->id ?? null) === T_ENCAPSED_AND_WHITESPACE) {
+                        $tmp[$i + 1]->text = $matches[2] . $tmp[$i + 1]->text;
+                    }
+                    else {
+                        array_splice($tmp, $i + 1, 0, [new \PhpToken(T_ENCAPSED_AND_WHITESPACE, $matches[2])]);
+                    }
+                }
+                // php 7.3 において T_END_HEREDOC は必ず単一行になる
+                if ($tmp[$i]->id === T_ENCAPSED_AND_WHITESPACE) {
+                    if (($tmp[$i + 1]->id ?? null) === T_END_HEREDOC && preg_match('@^(\\s+)(.*)@um', $tmp[$i + 1]->text, $matches)) {
+                        $tmp[$i]->text = $tmp[$i]->text . $matches[1];
+                        $tmp[$i + 1]->text = $matches[2];
+                    }
+                }
+            }
+
+            $tokens[] = $tmp[$i];
+        }
+
+        // 改行を置換してインデント
+        $hereing = false;
+        foreach ($tokens as $i => $token) {
+            if ($options['heredoc']) {
+                if ($token->id === T_START_HEREDOC) {
+                    $hereing = true;
+                }
+                if ($token->id === T_END_HEREDOC) {
+                    $hereing = false;
+                }
+            }
+            if (in_array($token->id, [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true) || ($hereing && $token->id === T_ENCAPSED_AND_WHITESPACE)) {
+                $token->text = preg_replace("@(\\R)$indent@um", '$1' . $options['indent'], $token->text);
+            }
+            if ($options['trimempty']) {
+                if ($token->id === T_WHITESPACE) {
+                    $token->text = preg_replace("@(\\R)[ \\t]+(\\R)@um", '$1$2', $token->text);
+                }
+            }
+
+            $tokens[$i] = $token;
+        }
+        return implode('', array_column($tokens, 'text'));
+    }
+
+    /**
      * php のコード断片をパースする
      *
-     * 結果配列は token_get_all したものだが、「字句の場合に文字列で返す」仕様は適用されずすべて配列で返す。
-     * つまり必ず `[TOKENID, TOKEN, LINE, POS]` で返す。
-     *
-     * @todo 現在の仕様では php タグが自動で付与されるが、標準と異なり直感的ではないのでその仕様は除去する
      * @todo そもそも何がしたいのかよくわからない関数になってきたので動作の洗い出しが必要
      *
      * Example:
      * ```php
-     * $phpcode = 'namespace Hogera;
+     * $phpcode = '<?php
+     * namespace Hogera;
      * class Example
      * {
      *     // something
      * }';
      *
      * // namespace ～ ; を取得
-     * $part = parse_php($phpcode, [
+     * $part = php_parse($phpcode, [
      *     'begin' => T_NAMESPACE,
      *     'end'   => ';',
      * ]);
-     * that(implode('', array_column($part, 1)))->isSame('namespace Hogera;');
+     * that(implode('', array_column($part, 'text')))->isSame('namespace Hogera;');
      *
      * // class ～ { を取得
-     * $part = parse_php($phpcode, [
+     * $part = php_parse($phpcode, [
      *     'begin' => T_CLASS,
      *     'end'   => '{',
      * ]);
-     * that(implode('', array_column($part, 1)))->isSame("class Example\n{");
+     * that(implode('', array_column($part, 'text')))->isSame("class Example\n{");
      * ```
      *
      * @package ryunosuke\Functions\Package\misc
      *
      * @param string $phpcode パースする php コード
      * @param array|int $option パースオプション
-     * @return array トークン配列
+     * @return \PhpToken[] トークン配列
      */
-    public static function parse_php($phpcode, $option = [])
+    public static function php_parse($phpcode, $option = [])
     {
         if (is_int($option)) {
             $option = ['flags' => $option];
         }
 
         $default = [
-            'phptag'         => true, // 初めに php タグを付けるか
             'short_open_tag' => null, // ショートオープンタグを扱うか（null だと余計なことはせず ini に従う）
             'line'           => [],   // 行の範囲（以上以下）
             'position'       => [],   // 文字位置の範囲（以上以下）
             'begin'          => [],   // 開始トークン
             'end'            => [],   // 終了トークン
             'offset'         => 0,    // 開始トークン位置
-            'flags'          => 0,    // token_get_all の $flags. TOKEN_PARSE を与えると ParseError が出ることがあるのでデフォルト 0
+            'flags'          => 0,    // PHPToken の $flags. TOKEN_PARSE を与えると ParseError が出ることがあるのでデフォルト 0
             'cache'          => true, // キャッシュするか否か
             'greedy'         => false,// end と nest か一致したときに処理を継続するか
             'backtick'       => true, // `` もパースするか
@@ -982,90 +887,111 @@ class Utils
         ];
         $option += $default;
 
-        $cachekey = \ryunosuke\SimpleCache\Utils::var_hash($phpcode) . $option['flags'] . '-' . $option['phptag'] . '-' . var_export($option['short_open_tag'], true);
+        $cachekey = \ryunosuke\SimpleCache\Utils::var_hash($phpcode) . $option['flags'] . '-' . $option['backtick'] . '-' . var_export($option['short_open_tag'], true);
         static $cache = [];
         if (!($option['cache'] && isset($cache[$cachekey]))) {
-            $phptag = $option['phptag'] ? '<?php ' : '';
-            $phpcode = $phptag . $phpcode;
-            $position = -strlen($phptag);
-
+            $position = 0;
             $backtick = '';
+            $backticktoken = null;
             $backticking = false;
 
             $tokens = [];
-            $tmp = token_get_all($phpcode, $option['flags']);
+            $tmp = \PhpToken::tokenize($phpcode, $option['flags']);
             for ($i = 0; $i < count($tmp); $i++) {
                 $token = $tmp[$i];
 
-                // token_get_all の結果は微妙に扱いづらいので少し調整する（string/array だったり、名前変換の必要があったり）
-                if (!is_array($token)) {
-                    $last = $tokens[count($tokens) - 1] ?? [null, 1, 0];
-                    $token = [ord($token), $token, $last[2] + preg_match_all('/(?:\r\n|\r|\n)/', $last[1])];
-                }
-
                 // @codeCoverageIgnoreStart
-                if ($option['short_open_tag'] === true && $token[0] === T_INLINE_HTML && ($p = strpos($token[1], '<?')) !== false) {
+                if ($option['short_open_tag'] === true && $token->id === T_INLINE_HTML && ($p = strpos($token->text, '<?')) !== false) {
                     $newtokens = [];
                     $nlcount = 0;
 
                     if ($p !== 0) {
-                        $html = substr($token[1], 0, $p);
+                        $html = substr($token->text, 0, $p);
                         $nlcount = preg_match_all('#\r\n|\r|\n#u', $html);
-                        $newtokens[] = [T_INLINE_HTML, $html, $token[2]];
+                        $newtokens[] = new \PhpToken(T_INLINE_HTML, $html, $token->line);
                     }
 
-                    $code = substr($token[1], $p + 2);
-                    $subtokens = token_get_all("<?php $code");
-                    $subtokens[0][1] = '<?';
+                    $code = substr($token->text, $p + 2);
+                    $subtokens = \PhpToken::tokenize("<?php $code");
+                    $subtokens[0]->text = '<?';
                     foreach ($subtokens as $subtoken) {
-                        if (is_array($subtoken)) {
-                            $subtoken[2] += $token[2] + $nlcount - 1;
-                        }
+                        $subtoken->line += $token->line + $nlcount - 1;
                         $newtokens[] = $subtoken;
                     }
 
                     array_splice($tmp, $i + 1, 0, $newtokens);
                     continue;
                 }
-                if ($option['short_open_tag'] === false && $token[0] === T_OPEN_TAG && $token[1] === '<?') {
+                if ($option['short_open_tag'] === false && $token->id === T_OPEN_TAG && $token->text === '<?') {
                     for ($j = $i + 1; $j < count($tmp); $j++) {
-                        if ($tmp[$j][0] === T_CLOSE_TAG) {
+                        if ($tmp[$j]->id === T_CLOSE_TAG) {
                             break;
                         }
                     }
-                    $html = implode('', array_map(fn($token) => is_array($token) ? $token[1] : $token, array_slice($tmp, $i, $j - $i + 1)));
-                    array_splice($tmp, $i + 1, $j - $i, [[T_INLINE_HTML, $html, $token[2]]]);
+                    $html = implode('', array_map(fn($token) => $token->text, array_slice($tmp, $i, $j - $i + 1)));
+                    array_splice($tmp, $i + 1, $j - $i, [new \PhpToken(T_INLINE_HTML, $html, $token->line)]);
                     continue;
                 }
                 // @codeCoverageIgnoreEnd
 
                 if (!$option['backtick']) {
-                    if ($token[1] === '`') {
+                    if ($token->text === '`') {
                         if ($backticking) {
-                            $token[1] = $backtick . $token[1];
+                            $token->text = $backtick . $token->text;
+                            $token->line = $backticktoken->line;
+                            $token->pos = $backticktoken->pos;
                             $backtick = '';
+                        }
+                        else {
+                            $backticktoken = $token;
                         }
                         $backticking = !$backticking;
                     }
                     if ($backticking) {
-                        $backtick .= $token[1];
+                        $backtick .= $token->text;
                         continue;
                     }
                 }
 
-                $token[] = $position;
-                if ($option['flags'] & \ryunosuke\SimpleCache\Utils::TOKEN_NAME) {
-                    $token[] = !$option['backtick'] && $token[0] === 96 ? 'T_BACKTICK' : token_name($token[0]);
-                }
+                $token->pos = $position;
+                $position += strlen($token->text);
 
-                $position += strlen($token[1]);
+                /* PhpToken になりコピーオンライトが効かなくなったので時々書き換えをチェックした方が良い
+                $token = new class($token->id, $token->text, $token->line, $token->pos) extends \PhpToken {
+                    private array $backup = [];
+    
+                    public function backup()
+                    {
+                        $this->backup = [
+                            'id'   => $this->id,
+                            'text' => $this->text,
+                            'line' => $this->line,
+                            'pos'  => $this->pos,
+                        ];
+                    }
+    
+                    public function __clone(): void
+                    {
+                        $this->backup = [];
+                    }
+    
+                    public function __destruct()
+                    {
+                        foreach ($this->backup as $name => $value) {
+                            assert($this->$name === $value);
+                        }
+                    }
+                };
+                $token->backup();
+                 */
+
                 $tokens[] = $token;
             }
             // @codeCoverageIgnoreStart
             if ($option['short_open_tag'] === false) {
                 for ($i = 0; $i < count($tokens); $i++) {
-                    if ($tokens[$i][0] === T_INLINE_HTML && isset($tokens[$i + 1]) && $tokens[$i + 1][0] === T_INLINE_HTML) {
-                        $tokens[$i][1] .= $tokens[$i + 1][1];
+                    if ($tokens[$i]->id === T_INLINE_HTML && isset($tokens[$i + 1]) && $tokens[$i + 1]->id === T_INLINE_HTML) {
+                        $tokens[$i]->text .= $tokens[$i + 1]->text;
                         array_splice($tokens, $i + 1, 1, []);
                         $i--;
                     }
@@ -1092,21 +1018,21 @@ class Utils
         for ($i = $offset; $i < $endset; $i++) {
             $token = $tokens[$i];
 
-            if ($lines[0] > $token[2]) {
+            if ($lines[0] > $token->line) {
                 continue;
             }
-            if ($lines[1] < $token[2]) {
+            if ($lines[1] < $token->line) {
                 continue;
             }
-            if ($positions[0] > $token[3]) {
+            if ($positions[0] > $token->pos) {
                 continue;
             }
-            if ($positions[1] < $token[3]) {
+            if ($positions[1] < $token->pos) {
                 continue;
             }
 
             foreach ($begin_tokens as $t) {
-                if ($t === $token[0] || $t === $token[1]) {
+                if ($t === $token->id || $t === $token->text) {
                     $starting = true;
                     break;
                 }
@@ -1118,16 +1044,16 @@ class Utils
             $result[$i] = $token;
 
             foreach ($nest_tokens as $end_nest => $start_nest) {
-                if ($token[0] === $start_nest || $token[1] === $start_nest) {
+                if ($token->id === $start_nest || $token->text === $start_nest) {
                     $nesting++;
                 }
-                if ($token[0] === $end_nest || $token[1] === $end_nest) {
+                if ($token->id === $end_nest || $token->text === $end_nest) {
                     $nesting--;
                 }
             }
 
             foreach ($end_tokens as $t) {
-                if ($t === $token[0] || $t === $token[1]) {
+                if ($t === $token->id || $t === $token->text) {
                     if ($nesting <= 0 || ($nesting === 1 && in_array($t, $nest_tokens, true))) {
                         if ($nesting === 0 && $greedy && isset($nest_tokens[$t])) {
                             break;
@@ -1139,73 +1065,6 @@ class Utils
             }
         }
         return $result;
-    }
-
-    /**
-     * エイリアス名を完全修飾名に解決する
-     *
-     * 例えばあるファイルのある名前空間で `use Hoge\Fuga\Piyo;` してるときの `Piyo` を `Hoge\Fuga\Piyo` に解決する。
-     *
-     * Example:
-     * ```php
-     * // このような php ファイルがあるとして・・・
-     * file_set_contents(sys_get_temp_dir() . '/symbol.php', '
-     * <?php
-     * namespace vendor\NS;
-     *
-     * use ArrayObject as AO;
-     * use function strlen as SL;
-     *
-     * function InnerFunc(){}
-     * class InnerClass{}
-     * ');
-     * // 下記のように解決される
-     * that(resolve_symbol('AO', sys_get_temp_dir() . '/symbol.php'))->isSame('ArrayObject');
-     * that(resolve_symbol('SL', sys_get_temp_dir() . '/symbol.php'))->isSame('strlen');
-     * that(resolve_symbol('InnerFunc', sys_get_temp_dir() . '/symbol.php'))->isSame('vendor\\NS\\InnerFunc');
-     * that(resolve_symbol('InnerClass', sys_get_temp_dir() . '/symbol.php'))->isSame('vendor\\NS\\InnerClass');
-     * ```
-     *
-     * @package ryunosuke\Functions\Package\misc
-     *
-     * @param string $shortname エイリアス名
-     * @param string|array $nsfiles ファイル名 or [ファイル名 => 名前空間名]
-     * @param array $targets エイリアスタイプ（'const', 'function', 'alias' のいずれか）
-     * @return string|null 完全修飾名。解決できなかった場合は null
-     */
-    public static function resolve_symbol(string $shortname, $nsfiles, $targets = ['const', 'function', 'alias'])
-    {
-        // 既に完全修飾されている場合は何もしない
-        if (($shortname[0] ?? null) === '\\') {
-            return $shortname;
-        }
-
-        // use Inner\Space のような名前空間の use の場合を考慮する
-        $parts = explode('\\', $shortname, 2);
-        $prefix = isset($parts[1]) ? array_shift($parts) : null;
-
-        if (is_string($nsfiles)) {
-            $nsfiles = [$nsfiles => []];
-        }
-
-        $targets = (array) $targets;
-        foreach ($nsfiles as $filename => $namespaces) {
-            $namespaces = array_flip(array_map(fn($n) => trim($n, '\\'), (array) $namespaces));
-            foreach (\ryunosuke\SimpleCache\Utils::parse_namespace($filename) as $namespace => $ns) {
-                /** @noinspection PhpIllegalArrayKeyTypeInspection */
-                if (!$namespaces || isset($namespaces[$namespace])) {
-                    if (isset($ns['alias'][$prefix])) {
-                        return $ns['alias'][$prefix] . '\\' . implode('\\', $parts);
-                    }
-                    foreach ($targets as $target) {
-                        if (isset($ns[$target][$shortname])) {
-                            return $ns[$target][$shortname];
-                        }
-                    }
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -1238,14 +1097,14 @@ class Utils
         $end = $ref->getEndLine();
         $codeblock = implode('', array_slice($contents, $start - 1, $end - $start + 1));
 
-        $meta = \ryunosuke\SimpleCache\Utils::parse_php("<?php $codeblock", [
+        $meta = \ryunosuke\SimpleCache\Utils::php_parse("<?php $codeblock", [
             'begin' => [T_FN, T_FUNCTION],
             'end'   => ['{', T_DOUBLE_ARROW],
         ]);
         $end = array_pop($meta);
 
-        if ($end[0] === T_DOUBLE_ARROW) {
-            $body = \ryunosuke\SimpleCache\Utils::parse_php("<?php $codeblock", [
+        if ($end->id === T_DOUBLE_ARROW) {
+            $body = \ryunosuke\SimpleCache\Utils::php_parse("<?php $codeblock", [
                 'begin'  => T_DOUBLE_ARROW,
                 'end'    => [';', ',', ')'],
                 'offset' => \ryunosuke\SimpleCache\Utils::last_key($meta),
@@ -1254,14 +1113,14 @@ class Utils
             $body = array_slice($body, 1, -1);
         }
         else {
-            $body = \ryunosuke\SimpleCache\Utils::parse_php("<?php $codeblock", [
+            $body = \ryunosuke\SimpleCache\Utils::php_parse("<?php $codeblock", [
                 'begin'  => '{',
                 'end'    => '}',
                 'offset' => \ryunosuke\SimpleCache\Utils::last_key($meta),
             ]);
         }
 
-        return [trim(implode('', array_column($meta, 1))), trim(implode('', array_column($body, 1)))];
+        return [trim(implode('', array_column($meta, 'text'))), trim(implode('', array_column($body, 'text')))];
     }
 
     /**
@@ -1358,26 +1217,31 @@ class Utils
      * strcat の空文字回避版
      *
      * 基本は strcat と同じ。ただし、**引数の内1つでも空文字を含むなら空文字を返す**。
+     * さらに*引数の内1つでも null を含むなら null を返す**。
      *
      * 「プレフィックスやサフィックスを付けたいんだけど、空文字の場合はそのままで居て欲しい」という状況はまれによくあるはず。
      * コードで言えば `strlen($string) ? 'prefix-' . $string : '';` のようなもの。
-     * 可変引数なので 端的に言えば mysql の CONCAT みたいな動作になる（あっちは NULL だが）。
+     * 可変引数なので 端的に言えば mysql の CONCAT みたいな動作になる。
      *
      * ```php
      * that(concat('prefix-', 'middle', '-suffix'))->isSame('prefix-middle-suffix');
      * that(concat('prefix-', '', '-suffix'))->isSame('');
+     * that(concat('prefix-', null, '-suffix'))->isSame(null);
      * ```
      *
      * @package ryunosuke\Functions\Package\strings
      *
-     * @param mixed ...$variadic 結合する文字列（可変引数）
-     * @return string 結合した文字列
+     * @param ?string ...$variadic 結合する文字列（可変引数）
+     * @return ?string 結合した文字列
      */
     public static function concat(...$variadic)
     {
+        if (count(array_filter($variadic, 'is_null')) > 0) {
+            return null;
+        }
         $result = '';
         foreach ($variadic as $s) {
-            if (strlen($s = (string) $s) === 0) {
+            if (strlen($s) === 0) {
                 return '';
             }
             $result .= $s;
@@ -1652,10 +1516,11 @@ class Utils
         $config['cachedir'] ??= sys_get_temp_dir() . DIRECTORY_SEPARATOR . strtr(__NAMESPACE__, ['\\' => '%']);
         $config['storagedir'] ??= DIRECTORY_SEPARATOR === '/' ? '/var/tmp/rf' : (getenv('ALLUSERSPROFILE') ?: sys_get_temp_dir()) . '\\rf';
         $config['placeholder'] ??= '';
-        $config['var_stream'] ??= get_cfg_var('rfunc.var_stream') ?: 'VarStreamV010000';          // for compatible
-        $config['memory_stream'] ??= get_cfg_var('rfunc.memory_stream') ?: 'MemoryStreamV010000'; // for compatible
-        $config['chain.version'] ??= 1;
+        $config['var_stream'] ??= 'VarStreamV010000';
+        $config['memory_stream'] ??= 'MemoryStreamV010000';
+        $config['chain.version'] ??= 2;
         $config['chain.nullsafe'] ??= false;
+        $config['process.autoload'] ??= [];
 
         // setting
         if (is_array($option)) {
@@ -1729,7 +1594,7 @@ class Utils
      * that(arrayval([123]))->isSame([123]); // 配列は配列のまま
      *
      * // $recursive = false にしない限り再帰的に適用される
-     * $stdclass = stdclass(['key' => 'val']);
+     * $stdclass = (object) ['key' => 'val'];
      * that(arrayval([$stdclass], true))->isSame([['key' => 'val']]); // true なので中身も配列化される
      * that(arrayval([$stdclass], false))->isSame([$stdclass]);       // false なので中身は変わらない
      * ```
@@ -1952,7 +1817,6 @@ class Utils
      * クラス名のエイリアスや use, $this バインドなど可能な限り復元するが、おそらくあまりに複雑なことをしてると失敗する。
      *
      * リソースはファイル的なリソースであればメタ情報を出力して復元時に再オープンする。
-     * それ以外のリソースは null で出力される（将来的に例外にするかもしれない）。
      *
      * 軽くベンチを取ったところ、オブジェクトを含まない純粋な配列の場合、serialize の 200 倍くらいは速い（それでも var_export の方が速いが…）。
      * オブジェクトを含めば含むほど遅くなり、全要素がオブジェクトになると serialize と同程度になる。
@@ -2053,33 +1917,38 @@ class Utils
             $var_export = fn($v) => var_export($v, true);
             $neighborToken = function ($n, $d, $tokens) {
                 for ($i = $n + $d; isset($tokens[$i]); $i += $d) {
-                    if ($tokens[$i][0] !== T_WHITESPACE) {
+                    if ($tokens[$i]->id !== T_WHITESPACE) {
                         return $tokens[$i];
                     }
                 }
             };
             $resolveSymbol = function ($token, $prev, $next, $ref) use ($var_export) {
-                if ($token[0] === T_STRING) {
-                    if ($prev[0] === T_NEW || $next[0] === T_DOUBLE_COLON || $next[0] === T_VARIABLE || $next[1] === '{') {
-                        $token[1] = \ryunosuke\SimpleCache\Utils::resolve_symbol($token[1], $ref->getFileName(), 'alias') ?? $token[1];
+                $text = $token->text;
+                if ($token->id === T_STRING) {
+                    if ($prev->id === T_NEW || $next->id === T_DOUBLE_COLON || $next->id === T_VARIABLE || $next->text === '{') {
+                        $text = \ryunosuke\SimpleCache\Utils::namespace_resolve($text, $ref->getFileName(), 'alias') ?? $text;
                     }
-                    elseif ($next[1] === '(') {
-                        $token[1] = \ryunosuke\SimpleCache\Utils::resolve_symbol($token[1], $ref->getFileName(), 'function') ?? $token[1];
+                    elseif ($next->text === '(') {
+                        $text = \ryunosuke\SimpleCache\Utils::namespace_resolve($text, $ref->getFileName(), 'function') ?? $text;
                     }
                     else {
-                        $token[1] = \ryunosuke\SimpleCache\Utils::resolve_symbol($token[1], $ref->getFileName(), 'const') ?? $token[1];
+                        $text = \ryunosuke\SimpleCache\Utils::namespace_resolve($text, $ref->getFileName(), 'const') ?? $text;
                     }
                 }
 
                 // マジック定数の解決（__CLASS__, __TRAIT__ も書き換えなければならないが、非常に大変なので下記のみ）
-                if ($token[0] === T_FILE) {
-                    $token[1] = $var_export($ref->getFileName());
+                if ($token->id === T_FILE) {
+                    $text = $var_export($ref->getFileName());
                 }
-                if ($token[0] === T_DIR) {
-                    $token[1] = $var_export(dirname($ref->getFileName()));
+                if ($token->id === T_DIR) {
+                    $text = $var_export(dirname($ref->getFileName()));
                 }
-                if ($token[0] === T_NS_C) {
-                    $token[1] = $var_export($ref->getNamespaceName());
+                if ($token->id === T_NS_C) {
+                    $text = $var_export($ref->getNamespaceName());
+                }
+                if ($text !== null) {
+                    $token = clone $token;
+                    $token->text = $text;
                 }
                 return $token;
             };
@@ -2156,7 +2025,7 @@ class Utils
 
                 [$meta, $body] = \ryunosuke\SimpleCache\Utils::callable_code($value);
                 $arrow = \ryunosuke\SimpleCache\Utils::starts_with($meta, 'fn') ? ' => ' : ' ';
-                $tokens = array_slice(\ryunosuke\SimpleCache\Utils::parse_php("$meta{$arrow}$body;", TOKEN_PARSE), 1, -1);
+                $tokens = array_slice(\ryunosuke\SimpleCache\Utils::php_parse("<?php $meta{$arrow}$body;", TOKEN_PARSE), 1, -1);
 
                 $uses = [];
                 $context = [
@@ -2164,35 +2033,35 @@ class Utils
                     'brace' => 0,
                 ];
                 foreach ($tokens as $n => $token) {
-                    $prev = $neighborToken($n, -1, $tokens) ?? [null, null, null];
-                    $next = $neighborToken($n, +1, $tokens) ?? [null, null, null];
+                    $prev = $neighborToken($n, -1, $tokens) ?? (object) ['id' => null, 'text' => null, 'line' => null];
+                    $next = $neighborToken($n, +1, $tokens) ?? (object) ['id' => null, 'text' => null, 'line' => null];
 
                     // クロージャは何でもかける（クロージャ・無名クラス・ジェネレータ etc）のでネスト（ブレース）レベルを記録しておく
-                    if ($token[1] === '{') {
+                    if ($token->text === '{') {
                         $context['brace']++;
                     }
-                    if ($token[1] === '}') {
+                    if ($token->text === '}') {
                         $context['brace']--;
                     }
 
                     // 無名クラスは色々厄介なので読み飛ばすために覚えておく
-                    if ($prev[0] === T_NEW && $token[0] === T_CLASS) {
+                    if ($prev->id === T_NEW && $token->id === T_CLASS) {
                         $context['class'] = $context['brace'];
                     }
                     // そして無名クラスは色々かける上に終了条件が自明ではない（シンタックスエラーでない限りは {} が一致するはず）
-                    if ($token[1] === '}' && $context['class'] === $context['brace']) {
+                    if ($token->text === '}' && $context['class'] === $context['brace']) {
                         $context['class'] = 0;
                     }
 
                     // fromCallable 由来だと名前がついてしまう
-                    if (!$context['class'] && $prev[0] === T_FUNCTION && $token[0] === T_STRING) {
+                    if (!$context['class'] && $prev->id === T_FUNCTION && $token->id === T_STRING) {
                         unset($tokens[$n]);
                         continue;
                     }
 
                     // use 変数の導出
-                    if ($token[0] === T_VARIABLE) {
-                        $varname = substr($token[1], 1);
+                    if ($token->id === T_VARIABLE) {
+                        $varname = substr($token->text, 1);
                         // クロージャ内クロージャの use に反応してしまうので存在するときのみとする
                         if (array_key_exists($varname, $statics) && !isset($uses[$varname])) {
                             $recurself = $statics[$varname] === $value ? '&' : '';
@@ -2203,7 +2072,7 @@ class Utils
                     $tokens[$n] = $resolveSymbol($token, $prev, $next, $ref);
                 }
 
-                $code = \ryunosuke\SimpleCache\Utils::indent_php(implode('', array_column($tokens, 1)), [
+                $code = \ryunosuke\SimpleCache\Utils::php_indent(implode('', array_column($tokens, 'text')), [
                     'indent'   => $spacer1,
                     'baseline' => -1,
                 ]);
@@ -2234,7 +2103,7 @@ class Utils
                                 return "\$this->$vid = $declare()";
                             }
                         }
-                        catch (\Throwable $t) { // @codeCoverageIgnore
+                        catch (\Throwable) { // @codeCoverageIgnore
                             // through. treat regular object
                         }
                     }
@@ -2262,7 +2131,7 @@ class Utils
                         serialize($value);
                     }
                 }
-                catch (\Exception $e) {
+                catch (\Exception) {
                     return "\$this->$vid = new \\__PHP_Incomplete_Class()";
                 }
 
@@ -2272,7 +2141,7 @@ class Utils
                     $fname = $ref->getFileName();
                     $sline = $ref->getStartLine();
                     $eline = $ref->getEndLine();
-                    $tokens = \ryunosuke\SimpleCache\Utils::parse_php(implode('', array_slice(file($fname), $sline - 1, $eline - $sline + 1)));
+                    $tokens = \ryunosuke\SimpleCache\Utils::php_parse('<?php ' . implode('', array_slice(file($fname), $sline - 1, $eline - $sline + 1)));
 
                     $block = [];
                     $starting = false;
@@ -2283,7 +2152,7 @@ class Utils
                         $next = $neighborToken($n, +1, $tokens) ?? [null, null, null];
 
                         // 無名クラスは new class で始まるはず
-                        if ($token[0] === T_NEW && $next[0] === T_CLASS) {
+                        if ($token->id === T_NEW && $next->id === T_CLASS) {
                             $starting = true;
                         }
                         if (!$starting) {
@@ -2292,10 +2161,10 @@ class Utils
 
                         // コンストラクタの呼び出し引数はスキップする
                         if ($constructing !== null) {
-                            if ($token[1] === '(') {
+                            if ($token->text === '(') {
                                 $constructing++;
                             }
-                            if ($token[1] === ')') {
+                            if ($token->text === ')') {
                                 $constructing--;
                                 if ($constructing === 0) {
                                     $constructing = null;          // null を終了済みマークとして変数を再利用している
@@ -2309,16 +2178,17 @@ class Utils
                         }
 
                         // 引数ありコンストラクタは呼ばないのでリネームしておく
-                        if ($token[1] === '__construct' && $ref->getConstructor() && $ref->getConstructor()->getNumberOfRequiredParameters()) {
-                            $token[1] = "replaced__construct";
+                        if ($token->text === '__construct' && $ref->getConstructor() && $ref->getConstructor()->getNumberOfRequiredParameters()) {
+                            $token = clone $token;
+                            $token->text = "replaced__construct";
                         }
 
                         $block[] = $resolveSymbol($token, $prev, $next, $ref);
 
-                        if ($token[1] === '{') {
+                        if ($token->text === '{') {
                             $nesting++;
                         }
-                        if ($token[1] === '}') {
+                        if ($token->text === '}') {
                             $nesting--;
                             if ($nesting === 0) {
                                 break;
@@ -2326,7 +2196,7 @@ class Utils
                         }
                     }
 
-                    $code = \ryunosuke\SimpleCache\Utils::indent_php(implode('', array_column($block, 1)), [
+                    $code = \ryunosuke\SimpleCache\Utils::php_indent(implode('', array_column($block, 'text')), [
                         'indent'   => $spacer1,
                         'baseline' => -1,
                     ]);
@@ -2347,11 +2217,11 @@ class Utils
                 }
                 // __sleep があるならそれをプロパティとする
                 elseif (method_exists($value, '__sleep')) {
-                    $fields = array_intersect_key(\ryunosuke\SimpleCache\Utils::get_object_properties($value, $privates), array_flip($value->__sleep()));
+                    $fields = array_intersect_key(\ryunosuke\SimpleCache\Utils::object_properties($value, $privates), array_flip($value->__sleep()));
                 }
                 // それ以外は適当に漁る
                 else {
-                    $fields = \ryunosuke\SimpleCache\Utils::get_object_properties($value, $privates);
+                    $fields = \ryunosuke\SimpleCache\Utils::object_properties($value, $privates);
                 }
 
                 return "\$this->new(\$this->$vid, $classname, (function () {\n{$spacer1}return {$export([$fields, $privates], $nest + 1)};\n{$spacer0}}))";
@@ -2360,7 +2230,7 @@ class Utils
                 // スタンダードなリソースなら復元できないこともない
                 $meta = stream_get_meta_data($value);
                 if (!in_array(strtolower($meta['stream_type']), ['stdio', 'output'], true)) {
-                    return 'null'; // for compatible. 例外にしたい
+                    throw new \DomainException('resource is supported stream resource only.');
                 }
                 $meta['position'] = @ftell($value);
                 $meta['context'] = stream_context_get_options($value);
@@ -2409,7 +2279,7 @@ class Utils
                             if (isset($privates[$parent->name][$name]) && !$privates[$parent->name][$name] instanceof \__PHP_Incomplete_Class) {
                                 $property->setValue($object, $privates[$parent->name][$name]);
                             }
-                            if ((isset($fields[$name]) || array_key_exists($name, $fields))) {
+                            if (array_key_exists($name, $fields)) {
                                 if (!$fields[$name] instanceof \__PHP_Incomplete_Class) {
                                     $property->setValue($object, $fields[$name]);
                                 }

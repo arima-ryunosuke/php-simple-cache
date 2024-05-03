@@ -3,10 +3,11 @@
 namespace ryunosuke\SimpleCache\Contract;
 
 use ArrayAccess;
+use Psr\SimpleCache\CacheInterface;
 
 interface AllInterface extends
-    ArrayAccess,
     CacheInterface,
+    ArrayAccess,
     CleanableInterface,
     FetchableInterface,
     HashableInterface,

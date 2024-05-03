@@ -4,7 +4,7 @@ namespace ryunosuke\SimpleCache\Contract;
 
 trait SingleTrait
 {
-    public function get($key, $default = null)
+    public function get($key, $default = null): mixed
     {
         return $this->getMultiple([$key], $default)[$key];
     }
