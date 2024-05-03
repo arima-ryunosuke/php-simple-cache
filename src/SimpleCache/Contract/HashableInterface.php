@@ -2,6 +2,8 @@
 
 namespace ryunosuke\SimpleCache\Contract;
 
+use DateInterval;
+
 interface HashableInterface
 {
     /**
@@ -11,19 +13,19 @@ interface HashableInterface
      * @param mixed $default Default value to return if the key does not exist.
      * @return mixed The value of the item from the cache, or $default in case of cache miss.
      */
-    public function getByHash($key, $default = null);
+    public function getByHash(string $key, mixed $default = null);
 
     /**
      * Persists data in the hashed key, uniquely referenced by a key with an optional expiration TTL time.
      *
      * @param string $key The key of the item to store.
      * @param mixed $value The value of the item to store, must be serializable.
-     * @param null|int|\DateInterval $ttl Optional. The TTL value of this item. If no value is sent and
+     * @param null|int|DateInterval $ttl Optional. The TTL value of this item. If no value is sent and
      *                                      the driver supports TTL then the library may set a default value
      *                                      for it or let the driver take care of that.
      * @return bool True on success and false on failure.
      */
-    public function setByHash($key, $value, $ttl = null): bool;
+    public function setByHash(string $key, mixed $value, null|int|DateInterval $ttl = null): bool;
 
     /**
      * Delete an item from the cache by its unique hashed key.
@@ -31,7 +33,7 @@ interface HashableInterface
      * @param string $key The unique cache key of the item to delete.
      * @return bool True if the item was successfully removed. False if there was an error.
      */
-    public function deleteByHash($key): bool;
+    public function deleteByHash(string $key): bool;
 
     /**
      * Obtains multiple cache items by their unique hashed keys.
@@ -40,18 +42,18 @@ interface HashableInterface
      * @param mixed $default Default value to return for keys that do not exist.
      * @return iterable A list of key => value pairs. Cache keys that do not exist or are stale will have $default as value.
      */
-    public function getMultipleByHash($keys, $default = null): iterable;
+    public function getMultipleByHash(iterable $keys, mixed $default = null): iterable;
 
     /**
      * Persists a set of hashed key => value pairs in the cache, with an optional TTL.
      *
      * @param iterable $values A list of key => value pairs for a multiple-set operation.
-     * @param null|int|\DateInterval $ttl Optional. The TTL value of this item. If no value is sent and
+     * @param null|int|DateInterval $ttl Optional. The TTL value of this item. If no value is sent and
      *                                       the driver supports TTL then the library may set a default value
      *                                       for it or let the driver take care of that.
      * @return bool True on success and false on failure.
      */
-    public function setMultipleByHash($values, $ttl = null): bool;
+    public function setMultipleByHash(iterable $values, null|int|DateInterval $ttl = null): bool;
 
     /**
      * Deletes multiple hashed cache items in a single operation.
@@ -59,7 +61,7 @@ interface HashableInterface
      * @param iterable $keys A list of string-based keys to be deleted.
      * @return bool True if the items were successfully removed. False if there was an error.
      */
-    public function deleteMultipleByHash($keys): bool;
+    public function deleteMultipleByHash(iterable $keys): bool;
 
     /**
      * Determines whether an item is present in the hashed key.
@@ -72,5 +74,5 @@ interface HashableInterface
      * @param string $key The cache item key.
      * @return bool
      */
-    public function hasByHash($key): bool;
+    public function hasByHash(string $key): bool;
 }

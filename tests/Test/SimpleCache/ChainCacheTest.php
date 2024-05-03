@@ -2,6 +2,7 @@
 
 namespace ryunosuke\Test\SimpleCache;
 
+use DateInterval;
 use Psr\SimpleCache\CacheInterface;
 use ryunosuke\SimpleCache\ChainCache;
 use ryunosuke\SimpleCache\Contract\FetchableInterface;
@@ -89,15 +90,15 @@ class ChainCacheTest extends AbstractTestCase
             use MultipleTrait;
             use FetchTrait;
 
-            public function get($key, $default = null): mixed { return $default; }
+            public function get(string $key, mixed $default = null): mixed { return $default; }
 
-            public function set($key, $value, $ttl = null): bool { return true; }
+            public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool { return true; }
 
-            public function delete($key): bool { return true; }
+            public function delete(string $key): bool { return true; }
 
             public function clear(): bool { return true; }
 
-            public function has($key): bool { return false; }
+            public function has(string $key): bool { return false; }
         };
         $cache = new ChainCache([$dummy]);
 

@@ -2,11 +2,12 @@
 
 namespace ryunosuke\SimpleCache\Contract;
 
+use DateInterval;
 use Traversable;
 
 trait FetchTrait
 {
-    public function fetch($key, $provider, $ttl = null)
+    public function fetch(string $key, callable $provider, null|int|DateInterval $ttl = null)
     {
         $this->_lock($key, LOCK_SH);
         try {
@@ -29,7 +30,7 @@ trait FetchTrait
         }
     }
 
-    public function fetchMultiple(iterable $providers, $ttl = null): iterable
+    public function fetchMultiple(iterable $providers, null|int|DateInterval $ttl = null): iterable
     {
         $providers = $providers instanceof Traversable ? iterator_to_array($providers) : $providers;
         $keys      = array_keys($providers);
@@ -68,7 +69,7 @@ trait FetchTrait
         }
     }
 
-    private function _lock($key, int $operation): bool
+    private function _lock(string $key, int $operation): bool
     {
         if ($this instanceof LockableInterface) {
             return $this->lock($key, $operation);

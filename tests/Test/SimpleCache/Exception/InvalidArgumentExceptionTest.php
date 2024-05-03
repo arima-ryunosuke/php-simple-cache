@@ -22,7 +22,5 @@ class InvalidArgumentExceptionTest extends AbstractTestCase
         that(InvalidArgumentException::class)::normalizeTtlOrThrow(null)->is(null);
         that(InvalidArgumentException::class)::normalizeTtlOrThrow(123)->is(123);
         that(InvalidArgumentException::class)::normalizeTtlOrThrow(new DateInterval('PT1M2S'))->is(62);
-
-        that(InvalidArgumentException::class)::normalizeTtlOrThrow('hoge')->wasThrown('$ttl must be');
     }
 }

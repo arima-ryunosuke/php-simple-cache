@@ -2,9 +2,11 @@
 
 namespace ryunosuke\SimpleCache\Contract;
 
+use DateInterval;
+
 trait MultipleTrait
 {
-    public function getMultiple($keys, $default = null): iterable
+    public function getMultiple(iterable $keys, mixed $default = null): iterable
     {
         $result = [];
         foreach ($keys as $key) {
@@ -13,7 +15,7 @@ trait MultipleTrait
         return $result;
     }
 
-    public function setMultiple($values, $ttl = null): bool
+    public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
     {
         $result = true;
         foreach ($values as $key => $value) {
@@ -22,7 +24,7 @@ trait MultipleTrait
         return $result;
     }
 
-    public function deleteMultiple($keys): bool
+    public function deleteMultiple(iterable $keys): bool
     {
         $result = true;
         foreach ($keys as $key) {

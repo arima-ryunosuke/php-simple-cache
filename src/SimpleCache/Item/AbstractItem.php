@@ -30,7 +30,7 @@ abstract class AbstractItem
         return $this->metadata['size'];
     }
 
-    public function get()
+    public function get(): mixed
     {
         if (!isset($this->metadata)) {
             $generator      = $this->import($this->filename);
@@ -52,7 +52,7 @@ abstract class AbstractItem
         return $this->value;
     }
 
-    public function set($value, int $ttl): bool
+    public function set(mixed $value, int $ttl): bool
     {
         $this->value = $value;
 

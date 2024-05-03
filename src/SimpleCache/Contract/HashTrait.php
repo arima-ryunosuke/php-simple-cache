@@ -3,6 +3,7 @@
 namespace ryunosuke\SimpleCache\Contract;
 
 use Closure;
+use DateInterval;
 use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
 use stdClass;
 use Traversable;
@@ -44,22 +45,22 @@ trait HashTrait
         return true;
     }
 
-    public function getByHash($key, $default = null)
+    public function getByHash(string $key, mixed $default = null)
     {
         return $this->getMultipleByHash([$key], $default)[$key];
     }
 
-    public function setByHash($key, $value, $ttl = null): bool
+    public function setByHash(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
         return $this->setMultipleByHash([$key => $value], $ttl);
     }
 
-    public function deleteByHash($key): bool
+    public function deleteByHash(string $key): bool
     {
         return $this->deleteMultipleByHash([$key]);
     }
 
-    public function getMultipleByHash($keys, $default = null): iterable
+    public function getMultipleByHash(iterable $keys, mixed $default = null): iterable
     {
         $itemsMap = $this->___mapItems($keys);
 
@@ -88,7 +89,7 @@ trait HashTrait
         return $result;
     }
 
-    public function setMultipleByHash($values, $ttl = null): bool
+    public function setMultipleByHash(iterable $values, null|int|DateInterval $ttl = null): bool
     {
         $values = $values instanceof Traversable ? iterator_to_array($values) : $values;
 
@@ -110,7 +111,7 @@ trait HashTrait
         return $this->setMultiple($live, time() + 365 * 24 * 60 * 60);
     }
 
-    public function deleteMultipleByHash($keys): bool
+    public function deleteMultipleByHash(iterable $keys): bool
     {
         $itemsMap = $this->___mapItems($keys);
 
@@ -141,7 +142,7 @@ trait HashTrait
         return $result;
     }
 
-    public function hasByHash($key): bool
+    public function hasByHash(string $key): bool
     {
         return $this->getByHash($key, $this) !== $this;
     }

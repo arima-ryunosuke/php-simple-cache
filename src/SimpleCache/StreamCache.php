@@ -2,6 +2,7 @@
 
 namespace ryunosuke\SimpleCache;
 
+use DateInterval;
 use Exception;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -75,7 +76,7 @@ class StreamCache implements AllInterface
         $this->lockings = [];
     }
 
-    public function __debugInfo()
+    public function __debugInfo(): array
     {
         $classname  = self::class;
         $properties = (array) $this;
@@ -109,7 +110,7 @@ class StreamCache implements AllInterface
     // <editor-fold desc="CacheInterface">
 
     /** @inheritdoc */
-    public function get($key, $default = null): mixed
+    public function get(string $key, mixed $default = null): mixed
     {
         $item = $this->items[$key] ??= $this->createItem($this->_filename($key));
 
@@ -124,7 +125,7 @@ class StreamCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function set($key, $value, $ttl = null): bool
+    public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
         $ttl = InvalidArgumentException::normalizeTtlOrThrow($ttl) ?? $this->defaultTtl;
 
@@ -145,7 +146,7 @@ class StreamCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function delete($key): bool
+    public function delete(string $key): bool
     {
         $item = $this->items[$key] ?? $this->createItem($this->_filename($key));
 
@@ -163,7 +164,7 @@ class StreamCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function has($key): bool
+    public function has(string $key): bool
     {
         return $this->get($key, $this) !== $this;
     }
@@ -172,7 +173,7 @@ class StreamCache implements AllInterface
 
     // <editor-fold desc="LockableInterface">
 
-    public function lock($key, int $operation): bool
+    public function lock(string $key, int $operation): bool
     {
         if ($this->lockSecond === null) {
             return false;

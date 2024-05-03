@@ -11,5 +11,5 @@ interface LockableInterface
      * @param int $operation LOCK_**
      * @return bool success
      */
-    public function lock($key, int $operation): bool;
+    public function lock(string $key, int $operation): bool;
 }

@@ -2,6 +2,7 @@
 
 namespace ryunosuke\SimpleCache;
 
+use DateInterval;
 use ryunosuke\SimpleCache\Contract\AllInterface;
 use ryunosuke\SimpleCache\Contract\ArrayAccessTrait;
 use ryunosuke\SimpleCache\Contract\FetchTrait;
@@ -28,7 +29,7 @@ class NullCache implements AllInterface
     // <editor-fold desc="CacheInterface">
 
     /** @inheritdoc */
-    public function get($key, $default = null): mixed
+    public function get(string $key, mixed $default = null): mixed
     {
         InvalidArgumentException::normalizeKeyOrThrow($key, $this->enabledSlashKey);
 
@@ -36,7 +37,7 @@ class NullCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function set($key, $value, $ttl = null): bool
+    public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
         InvalidArgumentException::normalizeKeyOrThrow($key, $this->enabledSlashKey);
         InvalidArgumentException::normalizeTtlOrThrow($ttl);
@@ -45,7 +46,7 @@ class NullCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function delete($key): bool
+    public function delete(string $key): bool
     {
         InvalidArgumentException::normalizeKeyOrThrow($key, $this->enabledSlashKey);
 
@@ -59,7 +60,7 @@ class NullCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function has($key): bool
+    public function has(string $key): bool
     {
         return false;
     }
@@ -68,7 +69,7 @@ class NullCache implements AllInterface
 
     // <editor-fold desc="LockableInterface">
 
-    public function lock($key, int $operation): bool
+    public function lock(string $key, int $operation): bool
     {
         return false;
     }

@@ -2,6 +2,7 @@
 
 namespace ryunosuke\SimpleCache;
 
+use DateInterval;
 use Psr\SimpleCache\CacheInterface;
 use ryunosuke\SimpleCache\Contract\AllInterface;
 use ryunosuke\SimpleCache\Contract\ArrayAccessTrait;
@@ -23,7 +24,7 @@ class ChainCache implements AllInterface
     /** @var CacheInterface[] */
     private array $internals;
 
-    public function __construct($internals)
+    public function __construct(array $internals)
     {
         $this->internals = $internals;
     }
@@ -31,7 +32,7 @@ class ChainCache implements AllInterface
     // <editor-fold desc="CacheInterface">
 
     /** @inheritdoc */
-    public function getMultiple($keys, $default = null): iterable
+    public function getMultiple(iterable $keys, mixed $default = null): iterable
     {
         $keys   = $keys instanceof Traversable ? iterator_to_array($keys) : $keys;
         $keymap = array_flip($keys);
@@ -70,7 +71,7 @@ class ChainCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function setMultiple($values, $ttl = null): bool
+    public function setMultiple(iterable $values, null|int|DateInterval $ttl = null): bool
     {
         $result = true;
         foreach ($this->internals as $internal) {
@@ -80,7 +81,7 @@ class ChainCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function deleteMultiple($keys): bool
+    public function deleteMultiple(iterable $keys): bool
     {
         $result = true;
         foreach ($this->internals as $internal) {
@@ -100,7 +101,7 @@ class ChainCache implements AllInterface
     }
 
     /** @inheritdoc */
-    public function has($key): bool
+    public function has(string $key): bool
     {
         foreach ($this->internals as $internal) {
             if ($internal->has($key)) {
@@ -114,7 +115,7 @@ class ChainCache implements AllInterface
 
     // <editor-fold desc="LockableInterface">
 
-    public function lock($key, int $operation): bool
+    public function lock(string $key, int $operation): bool
     {
         /** @var LockableInterface[] $internals */
         $internals = array_filter($this->internals, fn($internal) => $internal instanceof LockableInterface);

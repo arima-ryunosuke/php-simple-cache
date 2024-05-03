@@ -26,7 +26,7 @@ class PhpItem extends AbstractItem
         $this->fallbackname = $fallbackdir . DIRECTORY_SEPARATOR . rawurlencode($filename);
     }
 
-    public function set($value, int $ttl): bool
+    public function set(mixed $value, int $ttl): bool
     {
         @unlink($this->fallbackname);
 

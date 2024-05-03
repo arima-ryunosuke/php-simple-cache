@@ -19,7 +19,7 @@ class InvalidArgumentException extends \InvalidArgumentException implements \Psr
         return $key;
     }
 
-    public static function normalizeTtlOrThrow($ttl): ?int
+    public static function normalizeTtlOrThrow(null|int|DateInterval $ttl): ?int
     {
         if ($ttl === null) {
             return null;
@@ -30,7 +30,5 @@ class InvalidArgumentException extends \InvalidArgumentException implements \Psr
         if ($ttl instanceof DateInterval) {
             return (new DateTime())->setTimestamp(0)->add($ttl)->getTimestamp();
         }
-
-        throw new static("\$ttl must be null|int|DateInterval(" . gettype($ttl) . ")");
     }
 }
