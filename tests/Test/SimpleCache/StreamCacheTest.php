@@ -223,7 +223,7 @@ class StreamCacheTest extends AbstractTestCase
      */
     function test_memorize($url, $options)
     {
-        $cache = new StreamCache($url, $options + ['memorize' => true]);
+        $cache = new StreamCache($url, $options + ['memorize' => null]);
 
         that($cache)->set($this->id, 'abc')->isTrue();
         that($cache)->get($this->id)->is('abc');
@@ -231,7 +231,7 @@ class StreamCacheTest extends AbstractTestCase
         that($cache)->delete($this->id)->isTrue();
         that($cache)->items->notHasKey($this->id);
 
-        $cache = new StreamCache($url, $options + ['memorize' => false]);
+        $cache = new StreamCache($url, $options + ['memorize' => 0]);
 
         that($cache)->set($this->id, 'abc')->isTrue();
         that($cache)->get($this->id)->is('abc');

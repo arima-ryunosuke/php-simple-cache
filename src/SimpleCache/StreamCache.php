@@ -62,7 +62,7 @@ class StreamCache implements AllInterface
 
         $this->defaultTtl  = $options['defaultTtl'] ?? 60 * 60 * 24 * 365 * 10;
         $this->lockSecond  = $options['lockSecond'] ?? null;
-        $this->memorize    = ($options['memorize'] ?? true) === true ? PHP_INT_MAX : $options['memorize']; // for compatible
+        $this->memorize    = $options['memorize'] ?? 65535;
         $this->itemClasses = $options['itemClasses'] ?? [];
         $this->itemClasses += [
             'php'           => \ryunosuke\SimpleCache\Item\PhpItem::class,
