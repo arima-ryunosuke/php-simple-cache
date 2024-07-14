@@ -98,6 +98,10 @@ MIT
 - [change] タイプヒントを完備
 - [*change] memorize を int 限定に変更
 
+### 1.0.8
+
+- [composer] update
+
 ### 1.0.7
 
 - [feature] All としてすべてを継承するインターフェースを追加
