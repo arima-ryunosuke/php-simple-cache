@@ -170,13 +170,18 @@ class Utils
      * 引数の配列を生成する。
      *
      * 配列以外を渡すと配列化されて追加される。
-     * 連想配列は未対応。あくまで普通の配列化のみ。
+     * 配列を渡してもそのままだが、連番配列の場合はマージ、連想配列の場合は結合となる。
      * iterable や Traversable は考慮せずあくまで「配列」としてチェックする。
      *
      * Example:
      * ```php
+     * // 値は配列化される
      * that(arrayize(1, 2, 3))->isSame([1, 2, 3]);
+     * // 配列はそのまま
      * that(arrayize([1], [2], [3]))->isSame([1, 2, 3]);
+     * // 連想配列、連番配列の挙動
+     * that(arrayize([1, 2, 3], [4, 5, 6], ['a' => 'A1'], ['a' => 'A2']))->isSame([1, 2, 3, 4, 5, 6, 'a' => 'A1']);
+     * // stdClass は foreach 可能だがあくまで配列としてチェックする
      * $object = new \stdClass();
      * that(arrayize($object, false, [1, 2, 3]))->isSame([$object, false, 1, 2, 3]);
      * ```
@@ -193,11 +198,13 @@ class Utils
             if (!is_array($arg)) {
                 $result[] = $arg;
             }
-            elseif (!\ryunosuke\SimpleCache\Utils::is_hasharray($arg)) {
+            elseif ($result && !\ryunosuke\SimpleCache\Utils::is_hasharray($arg)) {
                 $result = array_merge($result, $arg);
             }
             else {
-                $result += $arg;
+                // array_merge に合わせるなら $result = $arg + $result で後方上書きの方がいいかも
+                // 些細な変更だけど後方互換性が完全に壊れるのでいったん保留（可変引数なんてほとんど使ってないと思うけど…）
+                $result += $arg; // for compatible
             }
         }
         return $result;
@@ -308,7 +315,7 @@ class Utils
      *
      * Example:
      * ```php
-     * $object = new \Exception('something', 42);
+     * $object = new #[\AllowDynamicProperties] class('something', 42) extends \Exception{};
      * $object->oreore = 'oreore';
      *
      * // get_object_vars はそのスコープから見えないプロパティを取得できない
@@ -1087,9 +1094,10 @@ class Utils
      * @package ryunosuke\Functions\Package\reflection
      *
      * @param callable|\ReflectionFunctionAbstract $callable コードを取得する callable
+     * @param bool $return_token true にすると生のトークン配列で返す
      * @return array ['定義部分', '{処理コード}']
      */
-    public static function callable_code($callable)
+    public static function callable_code($callable, bool $return_token = false)
     {
         $ref = $callable instanceof \ReflectionFunctionAbstract ? $callable : \ryunosuke\SimpleCache\Utils::reflect_callable($callable);
         $contents = file($ref->getFileName());
@@ -1118,6 +1126,10 @@ class Utils
                 'end'    => '}',
                 'offset' => \ryunosuke\SimpleCache\Utils::last_key($meta),
             ]);
+        }
+
+        if ($return_token) {
+            return [$meta, $body];
         }
 
         return [trim(implode('', array_column($meta, 'text'))), trim(implode('', array_column($body, 'text')))];
@@ -1181,16 +1193,41 @@ class Utils
     /**
      * callable から ReflectionFunctionAbstract を生成する
      *
+     * 実際には ReflectionFunctionAbstract を下記の独自拡張した Reflection クラスを返す（メソッドのオーバーライド等はしていないので完全互換）。
+     * - __invoke: 元となったオブジェクトを $this として invoke する（関数・クロージャは invoke と同義）
+     * - call: 実行 $this を指定して invoke する（クロージャ・メソッドのみ）
+     *   - 上記二つは __call/__callStatic のメソッドも呼び出せる
+     * - getDeclaration: 宣言部のコードを返す
+     * - getCode: 定義部のコードを返す
+     * - isStatic: $this バインド可能かを返す（クロージャのみ）
+     * - getUsedVariables: use している変数配列を返す（クロージャのみ）
+     *
      * Example:
      * ```php
      * that(reflect_callable('sprintf'))->isInstanceOf(\ReflectionFunction::class);
      * that(reflect_callable('\Closure::bind'))->isInstanceOf(\ReflectionMethod::class);
+     *
+     * $x = 1;
+     * $closure = function ($a, $b) use (&$x) { return $a + $b; };
+     * $reflection = reflect_callable($closure);
+     * // 単純実行
+     * that($reflection(1, 2))->is(3);
+     * // 無名クラスを $this として実行
+     * that($reflection->call(new class(){}, 1, 2))->is(3);
+     * // 宣言部を返す
+     * that($reflection->getDeclaration())->is('function ($a, $b) use (&$x)');
+     * // 定義部を返す
+     * that($reflection->getCode())->is('{ return $a + $b; }');
+     * // static か返す
+     * that($reflection->isStatic())->is(false);
+     * // use 変数を返す
+     * that($reflection->getUsedVariables())->is(['x' => 1]);
      * ```
      *
      * @package ryunosuke\Functions\Package\reflection
      *
      * @param callable $callable 対象 callable
-     * @return \ReflectionFunction|\ReflectionMethod リフレクションインスタンス
+     * @return \ReflectCallable|\ReflectionFunction|\ReflectionMethod リフレクションインスタンス
      */
     public static function reflect_callable($callable)
     {
@@ -1199,17 +1236,125 @@ class Utils
             throw new \InvalidArgumentException("'$call_name' is not callable");
         }
 
-        if ($callable instanceof \Closure || strpos($call_name, '::') === false) {
-            return new \ReflectionFunction($callable);
+        if (is_string($call_name) && strpos($call_name, '::') === false) {
+            return new class($callable) extends \ReflectionFunction {
+                private $definition;
+
+                public function __invoke(...$args): mixed
+                {
+                    return $this->invoke(...$args);
+                }
+
+                public function getDeclaration(): string
+                {
+                    return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[0];
+                }
+
+                public function getCode(): string
+                {
+                    return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[1];
+                }
+            };
+        }
+        elseif ($callable instanceof \Closure) {
+            return new class($callable) extends \ReflectionFunction {
+                private $callable;
+                private $definition;
+
+                public function __construct($function)
+                {
+                    parent::__construct($function);
+
+                    $this->callable = $function;
+                }
+
+                public function __invoke(...$args): mixed
+                {
+                    return $this->invoke(...$args);
+                }
+
+                public function call($newThis = null, ...$args): mixed
+                {
+                    return ($this->callable)->call($newThis ?? $this->getClosureThis(), ...$args);
+                }
+
+                public function getDeclaration(): string
+                {
+                    return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[0];
+                }
+
+                public function getCode(): string
+                {
+                    return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[1];
+                }
+
+                public function isStatic(): bool
+                {
+                    return !\ryunosuke\SimpleCache\Utils::is_bindable_closure($this->callable);
+                }
+
+                public function getUsedVariables(): array
+                {
+                    $uses = \ryunosuke\SimpleCache\Utils::object_properties($this->callable);
+                    unset($uses['this']);
+                    return $uses;
+                }
+            };
         }
         else {
             [$class, $method] = explode('::', $call_name, 2);
             // for タイプ 5: 相対指定による静的クラスメソッドのコール (PHP 5.3.0 以降)
             if (strpos($method, 'parent::') === 0) {
                 [, $method] = explode('::', $method);
-                return (new \ReflectionClass($class))->getParentClass()->getMethod($method);
+                $class = get_parent_class($class);
             }
-            return new \ReflectionMethod($class, $method);
+
+            $called_name = '';
+            if (!method_exists(is_array($callable) && is_object($callable[0]) ? $callable[0] : $class, $method)) {
+                $called_name = $method;
+                $method = is_array($callable) && is_object($callable[0]) ? '__call' : '__callStatic';
+            }
+
+            return new class($class, $method, $callable, $called_name) extends \ReflectionMethod {
+                private $callable;
+                private $call_name;
+                private $definition;
+
+                public function __construct($class, $method, $callable, $call_name)
+                {
+                    parent::__construct($class, $method);
+
+                    $this->setAccessible(true); // 8.1 はデフォルトで true になるので模倣する
+                    $this->callable = $callable;
+                    $this->call_name = $call_name;
+                }
+
+                public function __invoke(...$args): mixed
+                {
+                    if ($this->call_name) {
+                        $args = [$this->call_name, $args];
+                    }
+                    return $this->invoke($this->isStatic() ? null : $this->callable[0], ...$args);
+                }
+
+                public function call($newThis = null, ...$args): mixed
+                {
+                    if ($this->call_name) {
+                        $args = [$this->call_name, $args];
+                    }
+                    return $this->getClosure($newThis ?? ($this->isStatic() ? null : $this->callable[0]))(...$args);
+                }
+
+                public function getDeclaration(): string
+                {
+                    return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[0];
+                }
+
+                public function getCode(): string
+                {
+                    return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[1];
+                }
+            };
         }
     }
 
@@ -1273,7 +1418,7 @@ class Utils
      * @param string $string 対象文字列
      * @return array [namespace, localname]
      */
-    public static function namespace_split($string)
+    public static function namespace_split(?string $string)
     {
         $pos = strrpos($string, '\\');
         if ($pos === false) {
@@ -1303,10 +1448,8 @@ class Utils
      * @param bool $case_insensitivity 大文字小文字を無視するか
      * @return bool 指定文字列で始まるなら true を返す
      */
-    public static function starts_with($string, $with, $case_insensitivity = false)
+    public static function starts_with(?string $string, $with, $case_insensitivity = false)
     {
-        assert(\ryunosuke\SimpleCache\Utils::is_stringable($string));
-
         foreach ((array) $with as $w) {
             assert(strlen($w));
 
@@ -1356,6 +1499,22 @@ class Utils
         }
 
         return $str1 === $str2;
+    }
+
+    /**
+     * url safe な base64_encode
+     *
+     * れっきとした RFC があるのかは分からないが '+' => '-', '/' => '_' がデファクトだと思うのでそのようにしてある。
+     * パディングの = も外す。
+     *
+     * @package ryunosuke\Functions\Package\url
+     *
+     * @param string $string 変換元文字列
+     * @return string base64url 文字列
+     */
+    public static function base64url_encode($string)
+    {
+        return rtrim(strtr(base64_encode($string), ['+' => '-', '/' => '_']), '=');
     }
 
     /**
@@ -1759,41 +1918,6 @@ class Utils
     }
 
     /**
-     * 変数が文字列化できるか調べる
-     *
-     * 「配列」「__toString を持たないオブジェクト」が false になる。
-     * （厳密に言えば配列は "Array" になるので文字列化できるといえるがここでは考えない）。
-     *
-     * Example:
-     * ```php
-     * // こいつらは true
-     * that(is_stringable(null))->isTrue();
-     * that(is_stringable(true))->isTrue();
-     * that(is_stringable(3.14))->isTrue();
-     * that(is_stringable(STDOUT))->isTrue();
-     * that(is_stringable(new \Exception()))->isTrue();
-     * // こいつらは false
-     * that(is_stringable(new \ArrayObject()))->isFalse();
-     * that(is_stringable([1, 2, 3]))->isFalse();
-     * ```
-     *
-     * @package ryunosuke\Functions\Package\var
-     *
-     * @param mixed $var 調べる値
-     * @return bool 文字列化できるなら true
-     */
-    public static function is_stringable($var)
-    {
-        if (is_array($var)) {
-            return false;
-        }
-        if (is_object($var) && !method_exists($var, '__toString')) {
-            return false;
-        }
-        return true;
-    }
-
-    /**
      * var_export を色々と出力できるようにしたもの
      *
      * php のコードに落とし込むことで serialize と比較してかなり高速に動作する。
@@ -2151,8 +2275,8 @@ class Utils
                         $prev = $neighborToken($n, -1, $tokens) ?? [null, null, null];
                         $next = $neighborToken($n, +1, $tokens) ?? [null, null, null];
 
-                        // 無名クラスは new class で始まるはず
-                        if ($token->id === T_NEW && $next->id === T_CLASS) {
+                        // 無名クラスは new class か new #[Attribute] で始まるはず（new #[A] ClassName は許可されていない）
+                        if (($token->id === T_NEW && $next->id === T_CLASS) || ($token->id === T_NEW && $next->id === T_ATTRIBUTE)) {
                             $starting = true;
                         }
                         if (!$starting) {
@@ -2251,7 +2375,7 @@ class Utils
         static $factory = null;
         if ($factory === null) {
             // @codeCoverageIgnoreStart
-            $factory = $export(new class() {
+            $factory = $export(new #[\AllowDynamicProperties] class() {
                 public function new(&$object, $class, $provider)
                 {
                     if ($class instanceof \Closure) {
@@ -2406,6 +2530,6 @@ class Utils
             return $hash;
         }
 
-        return rtrim(strtr(base64_encode($hash), ['+' => '-', '/' => '_']));
+        return \ryunosuke\SimpleCache\Utils::base64url_encode($hash);
     }
 }
