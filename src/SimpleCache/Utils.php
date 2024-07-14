@@ -1573,7 +1573,7 @@ class Utils
                 // 名前空間自体がないなら作る or 読む
                 if (!isset($this->cache[$namespace])) {
                     $nsarray = [];
-                    $cachpath = $this->cachedir . '/' . rawurldecode($namespace) . self::CACHE_EXT;
+                    $cachpath = $this->cachedir . '/' . rawurlencode($namespace) . self::CACHE_EXT;
                     if (file_exists($cachpath)) {
                         $nsarray = require $cachpath;
                     }
@@ -1656,6 +1656,7 @@ class Utils
         $config['memory_stream'] ??= get_cfg_var('rfunc.memory_stream') ?: 'MemoryStreamV010000'; // for compatible
         $config['chain.version'] ??= 1;
         $config['chain.nullsafe'] ??= false;
+        $config['process.autoload'] ??= [];
 
         // setting
         if (is_array($option)) {
