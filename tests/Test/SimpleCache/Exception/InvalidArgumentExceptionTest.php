@@ -10,11 +10,9 @@ class InvalidArgumentExceptionTest extends AbstractTestCase
 {
     function test_normalizeKeyOrThrow()
     {
-        that(InvalidArgumentException::class)::normalizeKeyOrThrow('this-is-valid/key', true)->is('this-is-valid/key');
-
-        that(InvalidArgumentException::class)::normalizeKeyOrThrow('this-is-valid/key', false)->wasThrown('contains reserved character');
-        that(InvalidArgumentException::class)::normalizeKeyOrThrow('', false)->wasThrown('is empty string');
-        that(InvalidArgumentException::class)::normalizeKeyOrThrow('{placeholder}', false)->wasThrown('contains reserved character');
+        that(InvalidArgumentException::class)::normalizeKeyOrThrow('this-is-valid/key')->wasThrown('contains reserved character');
+        that(InvalidArgumentException::class)::normalizeKeyOrThrow('')->wasThrown('is empty string');
+        that(InvalidArgumentException::class)::normalizeKeyOrThrow('{placeholder}')->wasThrown('contains reserved character');
     }
 
     function test_normalizeTtlOrThrow()

@@ -24,7 +24,6 @@ class StreamCache implements AllInterface
 
     private string $directory;
     private string $defaultExtension;
-    private string $directorySeparator;
     private bool   $directorySupport;
 
     private int    $defaultTtl;
@@ -47,10 +46,9 @@ class StreamCache implements AllInterface
             $directory = "file://$directory";
         }
 
-        $this->directory          = $directory;
-        $this->defaultExtension   = $options['defaultExtension'] ?? 'php';
-        $this->directorySeparator = $options['directorySeparator'] ?? '/';
-        $this->directorySupport   = $options['directorySupport'] ?? @(function ($directory) {
+        $this->directory        = $directory;
+        $this->defaultExtension = $options['defaultExtension'] ?? 'php';
+        $this->directorySupport = $options['directorySupport'] ?? @(function ($directory) {
             try {
                 mkdir($directory, 0777, true);
                 return is_dir($directory);
@@ -295,22 +293,22 @@ class StreamCache implements AllInterface
     protected function _filename(string $key): string
     {
         return $this->cachemap[$key] ??= (function ($key) {
-            $key = InvalidArgumentException::normalizeKeyOrThrow($key, strpos($this->directorySeparator, '/') !== false);
+            $key = InvalidArgumentException::normalizeKeyOrThrow($key);
 
-            $filename = strtr($key, [$this->directorySeparator => '/']);
-            if (!$this->directorySupport) {
-                $filename = strtr($filename, ['/' => '~']);
+            $keys = explode('.', $key);
+            if (isset($this->itemClasses[$keys[count($keys) - 1]])) {
+                $ext = array_pop($keys);
             }
-            $filename = "$this->directory/$filename";
+            else {
+                $ext = $this->defaultExtension;
+            }
+            $key = implode($this->directorySupport ? "/" : ".", $keys) . ".$ext";
 
-            $dirname = dirname($filename);
+            $filename = "$this->directory/$key";
+            $dirname  = dirname($filename);
+
             if ($this->directorySupport && !is_dir($dirname)) {
                 @mkdir($dirname, 0777, true);
-            }
-
-            $extension = $this->getExtension($filename);
-            if (!isset($this->itemClasses[$extension])) {
-                $filename .= ".$this->defaultExtension";
             }
 
             return $filename;
@@ -321,13 +319,11 @@ class StreamCache implements AllInterface
     {
         return $this->cachemap[$filename] ??= (function ($filename) {
             $extension = preg_quote($this->getExtension($filename), '@');
-            $key       = preg_replace("@\.$extension($|\?)@u", "", $filename);
-            $key       = substr($key, strlen($this->directory) + 1);
-            $key       = strtr($key, ['/' => $this->directorySeparator]);
 
-            if (!$this->directorySupport) {
-                $key = strtr($key, ['~' => '/']);
-            }
+            $key = preg_replace("@\.$extension($|\?)@u", "", $filename);
+            $key = substr($key, strlen($this->directory) + 1);
+            $key = strtr($key, ['/' => '.']);
+
             return $key;
         })($filename);
     }

@@ -9,7 +9,7 @@ class NullCacheTest extends AbstractTestCase
 {
     function test_all()
     {
-        $cache = new NullCache(true, true);
+        $cache = new NullCache(true);
 
         that($cache)->set("$this->id-1", '1')->is(true);
         that($cache)->has("$this->id-1")->is(false);
@@ -25,25 +25,10 @@ class NullCacheTest extends AbstractTestCase
         that($cache)->gc(1)->is(0);
     }
 
-    function test_enabledSlashKey()
-    {
-        $cache = new NullCache(true);
-
-        that($cache)->get('ho/ge', 'notfound')->is('notfound');
-        that($cache)->set('ho/ge', 'notfound')->is('notfound');
-        that($cache)->delete('ho/ge')->is('notfound');
-
-        $cache = new NullCache(false);
-
-        that($cache)->get('ho/ge', 'notfound')->wasThrown('contains reserved character');
-        that($cache)->set('ho/ge', 'notfound')->wasThrown('contains reserved character');
-        that($cache)->delete('ho/ge')->wasThrown('contains reserved character');
-    }
-
     function test_affectedReturnValue()
     {
         foreach ([true, false] as $affectedReturnValue) {
-            $cache = new NullCache(false, $affectedReturnValue);
+            $cache = new NullCache($affectedReturnValue);
 
             that($cache)->has('hoge')->is(false);
             that($cache)->clear()->is($affectedReturnValue);

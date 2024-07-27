@@ -7,12 +7,12 @@ use DateTime;
 
 class InvalidArgumentException extends \InvalidArgumentException implements \Psr\SimpleCache\InvalidArgumentException
 {
-    public static function normalizeKeyOrThrow(string $key, bool $enableSlash): string
+    public static function normalizeKeyOrThrow(string $key): string
     {
         if ($key === '') {
             throw new static("\$key is empty string");
         }
-        if (strpbrk($key, '{}()\\@:' . ($enableSlash ? '' : '/')) !== false) {
+        if (strpbrk($key, '{}()\\@:/') !== false) {
             throw new static("\$key contains reserved character({}()/\\@:) ($key)");
         }
 

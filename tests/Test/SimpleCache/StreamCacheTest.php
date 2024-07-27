@@ -85,7 +85,7 @@ class StreamCacheTest extends AbstractTestCase
 
         that($subcache)->get($this->id)->is('subitem');
         if (that($cache)->directorySupport->return()) {
-            that($cache)->keys()->contains("subcache/$this->id");
+            that($cache)->keys()->contains("subcache.$this->id");
         }
     }
 
@@ -311,27 +311,27 @@ class StreamCacheTest extends AbstractTestCase
         $cache = new StreamCache($url, $options);
 
         that($cache)->setMultiple([
-            "$this->id/x" => 'x',
-            "$this->id/y" => 'y',
-            "$this->id/z" => 'z',
+            "$this->id.x" => 'x',
+            "$this->id.y" => 'y',
+            "$this->id.z" => 'z',
         ])->isTrue();
 
         that($cache)->getMultiple([
-            "$this->id/x",
-            "$this->id/z",
+            "$this->id.x",
+            "$this->id.z",
         ])->is([
-            "$this->id/x" => 'x',
-            "$this->id/z" => 'z',
+            "$this->id.x" => 'x',
+            "$this->id.z" => 'z',
         ]);
 
         that($cache)->deleteMultiple([
-            "$this->id/x",
-            "$this->id/y",
+            "$this->id.x",
+            "$this->id.y",
         ])->isTrue();
 
-        that($cache)->has("$this->id/x")->isFalse();
-        that($cache)->has("$this->id/y")->isFalse();
-        that($cache)->has("$this->id/z")->isTrue();
+        that($cache)->has("$this->id.x")->isFalse();
+        that($cache)->has("$this->id.y")->isFalse();
+        that($cache)->has("$this->id.z")->isTrue();
 
         $called   = [];
         $provider = function ($value) use (&$called) {
@@ -339,13 +339,13 @@ class StreamCacheTest extends AbstractTestCase
             return $value;
         };
         that($cache)->fetchMultiple([
-            "$this->id/x" => fn() => $provider('X'),
-            "$this->id/y" => fn() => $provider('Y'),
-            "$this->id/z" => fn() => $provider('Z'),
+            "$this->id.x" => fn() => $provider('X'),
+            "$this->id.y" => fn() => $provider('Y'),
+            "$this->id.z" => fn() => $provider('Z'),
         ])->is([
-            "$this->id/x" => 'X',
-            "$this->id/y" => 'Y',
-            "$this->id/z" => 'z',
+            "$this->id.x" => 'X',
+            "$this->id.y" => 'Y',
+            "$this->id.z" => 'z',
         ]);
         that($called)->is(['X', 'Y']);
     }
@@ -358,14 +358,14 @@ class StreamCacheTest extends AbstractTestCase
         $cache = new StreamCache($url, $options);
 
         $cache->deleteMultiple([
-            "$this->id/x",
-            "$this->id/x/y",
-            "$this->id/x/y/z",
+            "$this->id.x",
+            "$this->id.x.y",
+            "$this->id.x.y.z",
         ]);
 
-        that($cache)->fetch("$this->id/x", fn() => 'aX')->is('aX');
-        that($cache)->fetch("$this->id/x/y", fn() => 'bX')->is('bX');
-        that($cache)->fetch("$this->id/x/y/z", fn() => 'cX')->is('cX');
+        that($cache)->fetch("$this->id.x", fn() => 'aX')->is('aX');
+        that($cache)->fetch("$this->id.x.y", fn() => 'bX')->is('bX');
+        that($cache)->fetch("$this->id.x.y.z", fn() => 'cX')->is('cX');
     }
 
     /**
@@ -443,15 +443,15 @@ class StreamCacheTest extends AbstractTestCase
         $cache = new StreamCache($url, $options);
 
         $cache->set($this->id, 'X');
-        $cache->set("$this->id/a", 'a');
-        $cache->set("$this->id/a/b", 'b');
-        $cache->set("$this->id/a/b/c", 'c');
+        $cache->set("$this->id.a", 'a');
+        $cache->set("$this->id.a.b", 'b');
+        $cache->set("$this->id.a.b.c", 'c');
 
         that($cache)->clear()->isTrue();
         that($cache)->has($this->id)->isFalse();
-        that($cache)->has("$this->id/a")->isFalse();
-        that($cache)->has("$this->id/a/b")->isFalse();
-        that($cache)->has("$this->id/a/b/c")->isFalse();
+        that($cache)->has("$this->id.a")->isFalse();
+        that($cache)->has("$this->id.a.b")->isFalse();
+        that($cache)->has("$this->id.a.b.c")->isFalse();
     }
 
     /**
@@ -477,12 +477,12 @@ class StreamCacheTest extends AbstractTestCase
     {
         $cache = new StreamCache($url, $options);
 
-        $cache->set("$this->id/a", 'a');
-        $cache->set("$this->id/a/b", 'b');
-        $cache->set("$this->id/a/b/c", 'c');
+        $cache->set("$this->id.a", 'a');
+        $cache->set("$this->id.a.b", 'b');
+        $cache->set("$this->id.a.b.c", 'c');
 
-        that($cache)->keys("$this->id/a/b*")->is(["$this->id/a/b", "$this->id/a/b/c"], null, true);
-        that($cache)->items("$this->id/a/b*")->eachIsInstanceOf(AbstractItem::class);
+        that($cache)->keys("$this->id.a.b*")->is(["$this->id.a.b", "$this->id.a.b.c"], null, true);
+        that($cache)->items("$this->id.a.b*")->eachIsInstanceOf(AbstractItem::class);
     }
 
     /**
@@ -493,17 +493,17 @@ class StreamCacheTest extends AbstractTestCase
         $cache = new StreamCache($url, $options);
 
         $cache->clear();
-        $cache->set("$this->id/a", 'a', 1);
-        $cache->set("$this->id/a/b", 'b', 50);
-        $cache->set("$this->id/a/b/c", 'c', 100);
+        $cache->set("$this->id.a", 'a', 1);
+        $cache->set("$this->id.a.b", 'b', 50);
+        $cache->set("$this->id.a.b.c", 'c', 100);
 
         sleep(2);
         that($cache)->gc(0.00)->is(0);
         that($cache)->gc(1.00)->isAny([0, 1]); // 0 for redis
 
-        that($cache)->get("$this->id/a")->isNull();
-        that($cache)->get("$this->id/a/b")->is('b');
-        that($cache)->get("$this->id/a/b/c")->is('c');
+        that($cache)->get("$this->id.a")->isNull();
+        that($cache)->get("$this->id.a.b")->is('b');
+        that($cache)->get("$this->id.a.b.c")->is('c');
     }
 
     /**
@@ -524,6 +524,35 @@ class StreamCacheTest extends AbstractTestCase
         that($cache)->get("$this->id-1KB")->is($f1KB);
         that($cache)->get("$this->id-1MB")->is($f1MB);
         that($cache)->get("$this->id-10MB")->is($f10MB);
+    }
+
+    function test_keyfile()
+    {
+        @mkdir($cachedir = strtr(sys_get_temp_dir() . '/stream-cache', ['\\' => '/']), 0777, true);
+
+        $cache = new StreamCache($cachedir, [
+            'directorySupport' => true,
+        ]);
+
+        that($cache)->_filename("a.b.c.hoge")->isSame("file://$cachedir/a/b/c/hoge.php");
+        that($cache)->_filename("a.b.c.php")->isSame("file://$cachedir/a/b/c.php");
+        that($cache)->_filename("a.b.c.php-serialize")->isSame("file://$cachedir/a/b/c.php-serialize");
+
+        that($cache)->_key("file://$cachedir/a/b/c/hoge.php")->isSame("a.b.c.hoge");
+        that($cache)->_key("file://$cachedir/a/b/c.php")->isSame("a.b.c");
+        that($cache)->_key("file://$cachedir/a/b/c.php-serialize")->isSame("a.b.c");
+
+        $cache = new StreamCache($cachedir, [
+            'directorySupport' => false,
+        ]);
+
+        that($cache)->_filename("a.b.c.hoge")->isSame("file://$cachedir/a.b.c.hoge.php");
+        that($cache)->_filename("a.b.c.php")->isSame("file://$cachedir/a.b.c.php");
+        that($cache)->_filename("a.b.c.php-serialize")->isSame("file://$cachedir/a.b.c.php-serialize");
+
+        that($cache)->_key("file://$cachedir/a.b.c.hoge.php")->isSame("a.b.c.hoge");
+        that($cache)->_key("file://$cachedir/a.b.c.php")->isSame("a.b.c");
+        that($cache)->_key("file://$cachedir/a.b.c.php-serialize")->isSame("a.b.c");
     }
 
     function test_getExtension()

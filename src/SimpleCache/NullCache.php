@@ -17,12 +17,10 @@ class NullCache implements AllInterface
     use HashTrait;
     use ArrayAccessTrait;
 
-    private bool $enabledSlashKey;
     private bool $affectedReturnValue;
 
-    public function __construct(bool $enabledSlashKey = false, bool $affectedReturnValue = true)
+    public function __construct(bool $affectedReturnValue = true)
     {
-        $this->enabledSlashKey     = $enabledSlashKey;
         $this->affectedReturnValue = $affectedReturnValue;
     }
 
@@ -31,7 +29,7 @@ class NullCache implements AllInterface
     /** @inheritdoc */
     public function get(string $key, mixed $default = null): mixed
     {
-        InvalidArgumentException::normalizeKeyOrThrow($key, $this->enabledSlashKey);
+        InvalidArgumentException::normalizeKeyOrThrow($key);
 
         return $default;
     }
@@ -39,7 +37,7 @@ class NullCache implements AllInterface
     /** @inheritdoc */
     public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
-        InvalidArgumentException::normalizeKeyOrThrow($key, $this->enabledSlashKey);
+        InvalidArgumentException::normalizeKeyOrThrow($key);
         InvalidArgumentException::normalizeTtlOrThrow($ttl);
 
         return $this->affectedReturnValue;
@@ -48,7 +46,7 @@ class NullCache implements AllInterface
     /** @inheritdoc */
     public function delete(string $key): bool
     {
-        InvalidArgumentException::normalizeKeyOrThrow($key, $this->enabledSlashKey);
+        InvalidArgumentException::normalizeKeyOrThrow($key);
 
         return $this->affectedReturnValue;
     }
