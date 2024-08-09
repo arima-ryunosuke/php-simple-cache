@@ -318,7 +318,7 @@ class StreamCache implements AllInterface
     protected function _key(string $filename): string
     {
         return $this->cachemap[$filename] ??= (function ($filename) {
-            $extension = preg_quote($this->getExtension($filename), '@');
+            $extension = preg_quote($this->getExtension($filename) ?? '', '@');
 
             $key = preg_replace("@\.$extension($|\?)@u", "", $filename);
             $key = substr($key, strlen($this->directory) + 1);
@@ -330,7 +330,7 @@ class StreamCache implements AllInterface
 
     private function createItem(string $filename): ?AbstractItem
     {
-        $extension = $this->getExtension($filename);
+        $extension = $this->getExtension($filename) ?? '';
         $classname = $this->itemClasses[$extension] ?? null;
 
         if ($classname === null) {
