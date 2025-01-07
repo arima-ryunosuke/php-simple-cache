@@ -96,17 +96,9 @@ class StreamCache implements AllInterface
         return $properties;
     }
 
-    public function withNamespace(string $namespace): self
+    public function withNamespace(string $namespace, array $options = []): static
     {
-        $that = clone $this;
-
-        $that->directory = "$this->directory/$namespace";
-
-        $that->items    = [];
-        $this->cachemap = [];
-        $this->lockings = [];
-
-        return $that;
+        return new static("$this->directory/$namespace", $options + get_object_vars($this));
     }
 
     // <editor-fold desc="CacheInterface">

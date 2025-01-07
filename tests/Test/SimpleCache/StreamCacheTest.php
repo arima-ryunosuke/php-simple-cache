@@ -78,7 +78,11 @@ class StreamCacheTest extends AbstractTestCase
     function test_withNamespace($url, $options)
     {
         $cache    = new StreamCache($url, $options);
-        $subcache = $cache->withNamespace('subcache');
+        $subcache = $cache->withNamespace('subcache', [
+            'defaultTtl' => 10,
+        ]);
+
+        that($subcache)->defaultTtl->is(10);
 
         $subcache->clear();
         $subcache->set($this->id, 'subitem');
