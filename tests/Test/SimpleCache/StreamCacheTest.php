@@ -490,7 +490,7 @@ class StreamCacheTest extends AbstractTestCase
      */
     function test_gc($url, $options)
     {
-        $cache = new StreamCache($url, $options);
+        $cache = new StreamCache($url, ['gcArgs' => 1.0] + $options);
 
         $cache->clear();
         $cache->set("$this->id.a", 'a', 1);

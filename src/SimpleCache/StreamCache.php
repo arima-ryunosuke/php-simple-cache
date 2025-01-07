@@ -72,6 +72,10 @@ class StreamCache implements AllInterface
         $this->items    = [];
         $this->cachemap = [];
         $this->lockings = [];
+
+        if (isset($options['gcArgs'])) {
+            $this->gc(...(array) $options['gcArgs']);
+        }
     }
 
     public function __debugInfo(): array
