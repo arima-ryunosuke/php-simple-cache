@@ -4,45 +4,30 @@ namespace ryunosuke\SimpleCache\Contract;
 
 use Closure;
 use DateInterval;
-use ryunosuke\SimpleCache\Exception\InvalidArgumentException;
-use stdClass;
 use Traversable;
 
 trait HashTrait
 {
     private Closure $___hashClosure;
-    private int     $___defaultTtl = 60 * 60 * 24 * 365 * 10;
 
-    private function ___mapItems(iterable $keys): array
+    private function ___mapHash(iterable $keys): array
     {
-        $hash = $this->___hashClosure ?? static fn($key) => hash('fnv164', $key);
+        $this->___hashClosure ??= static function ($key) {
+            return rtrim(strtr(base64_encode(implode("\n", [
+                hash('sha256', $key, true),
+                hash('fnv164', $key, true),
+            ])), ['/' => '_']), '=');
+        };
 
-        $hashmap = [];
+        $result = [];
         foreach ($keys as $key) {
-            $hashmap[$hash($key)][] = $key;
-        }
-
-        $items = [];
-        foreach ($this->getMultiple(array_keys($hashmap), []) as $hashkey => $item) {
-            $items[$hashkey] = (object) $item;
-        }
-
-        $results = [];
-        foreach ($hashmap as $hashkey => $keys) {
-            foreach ($keys as $key) {
-                $results[$hashkey][$key] = $items[$hashkey];
+            $hashedKey = ($this->___hashClosure)($key);
+            if (isset($result[$hashedKey])) {
+                trigger_error("hash collision($key vs {$result[$hashedKey]})", E_USER_WARNING);
             }
+            $result[$hashedKey] = $key;
         }
-
-        return $results;
-    }
-
-    private function ___emptyStdClass(stdClass $stdClass): bool
-    {
-        foreach ($stdClass as $ignored) {
-            return false;
-        }
-        return true;
+        return $result;
     }
 
     public function getByHash(string $key, mixed $default = null)
@@ -60,86 +45,59 @@ trait HashTrait
         return $this->deleteMultipleByHash([$key]);
     }
 
+    public function fetchByHash(string $key, callable $provider, null|int|DateInterval $ttl = null)
+    {
+        return $this->fetchMultipleByHash([$key => $provider], $ttl)[$key];
+    }
+
     public function getMultipleByHash(iterable $keys, mixed $default = null): iterable
     {
-        $itemsMap = $this->___mapItems($keys);
+        $keys = $keys instanceof Traversable ? iterator_to_array($keys) : $keys;
 
-        $dead   = [];
-        $result = [];
-        foreach ($itemsMap as $hashkey => $items) {
-            foreach ($items as $key => $item) {
-                [$value, $expire] = $item->$key ?? [$default, null];
-                if ($expire !== null && $expire <= time()) {
-                    $value = $default;
-                    unset($item->$key);
-                }
-                $result[$key] = $value;
-
-                if ($this->___emptyStdClass($item)) {
-                    $dead[$hashkey] = $item;
-                }
+        $hashedKeys = $this->___mapHash($keys);
+        $values     = array_fill_keys($keys, $default);
+        foreach ($this->getMultiple(array_keys($hashedKeys), []) as $hashedKey => $value) {
+            $key = $hashedKeys[$hashedKey];
+            if (isset($value[1]) && $value[1] !== $key) {
+                trigger_error("hash collision($key vs $value[1])", E_USER_WARNING);
+                $value[0] = null;
             }
+            $values[$key] = $value[0] ?? $default;
         }
-
-        // delete expired and empty item
-        if ($dead) {
-            $this->deleteMultiple(array_keys($dead));
-        }
-
-        return $result;
+        return $values;
     }
 
     public function setMultipleByHash(iterable $values, null|int|DateInterval $ttl = null): bool
     {
         $values = $values instanceof Traversable ? iterator_to_array($values) : $values;
 
-        $ttl = InvalidArgumentException::normalizeTtlOrThrow($ttl) ?? $this->___defaultTtl;
-        if ($ttl <= 0) {
-            return $this->deleteMultipleByHash(array_keys($values));
-        }
-
-        $itemsMap = $this->___mapItems(array_keys($values));
-
-        $live = [];
-        foreach ($itemsMap as $hashkey => $items) {
-            foreach ($items as $key => $item) {
-                $item->$key     = [$values[$key], time() + $ttl];
-                $live[$hashkey] = $item;
-            }
-        }
-
-        return $this->setMultiple($live, time() + 365 * 24 * 60 * 60);
+        $hashedKeys = $this->___mapHash(array_keys($values));
+        $values2    = array_map(fn($key) => [$values[$key], $key], $hashedKeys);
+        return $this->setMultiple($values2, $ttl);
     }
 
     public function deleteMultipleByHash(iterable $keys): bool
     {
-        $itemsMap = $this->___mapItems($keys);
+        $hashedKeys = $this->___mapHash($keys);
+        return $this->deleteMultiple(array_keys($hashedKeys));
+    }
 
-        $live = $dead = [];
-        foreach ($itemsMap as $hashkey => $items) {
-            foreach ($items as $key => $item) {
-                unset($item->$key);
-            }
-            foreach ($items as $item) {
-                if ($this->___emptyStdClass($item)) {
-                    $dead[$hashkey] = $item;
-                }
-                else {
-                    $live[$hashkey] = $item;
-                }
-            }
-        }
+    public function fetchMultipleByHash(iterable $providers, null|int|DateInterval $ttl = null): iterable
+    {
+        $providers = $providers instanceof Traversable ? iterator_to_array($providers) : $providers;
 
-        $result = $live || $dead;
-        // reset deleted item
-        if ($live) {
-            $result = $this->setMultiple($live, time() + 365 * 24 * 60 * 60) && $result;
+        $hashedKeys = $this->___mapHash(array_keys($providers));
+        $providers2 = array_map(fn($key) => fn() => [$providers[$key](), $key], $hashedKeys);
+        $values     = [];
+        foreach ($this->fetchMultiple($providers2, $ttl) as $hashedKey => $value) {
+            $key = $hashedKeys[$hashedKey];
+            if (isset($value[1]) && $value[1] !== $key) {
+                trigger_error("hash collision($key vs $value[1])", E_USER_WARNING);
+                $value[0] = $providers[$key]();
+            }
+            $values[$key] = $value[0];
         }
-        // delete empty item
-        if ($dead) {
-            $result = $this->deleteMultiple(array_keys($dead)) && $result;
-        }
-        return $result;
+        return $values;
     }
 
     public function hasByHash(string $key): bool

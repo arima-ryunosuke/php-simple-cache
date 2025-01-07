@@ -379,16 +379,16 @@ class StreamCacheTest extends AbstractTestCase
     {
         $cache = new StreamCache($url, $options);
 
-        $invalidPrefix               = '{}()\\@:';
-        that($cache)->___hashClosure = fn() => 'hoge';
+        $invalidPrefix = '{}()\\@:';
 
         that($cache)->hasByHash("$invalidPrefix.$this->id/hoge")->isFalse();
         that($cache)->setByHash("$invalidPrefix.$this->id/hoge", 'Hoge')->isTrue();
+        that($cache)->fetchByHash("$invalidPrefix.$this->id/hoge", fn() => 'Hoge2')->is('Hoge');
         that($cache)->getByHash("$invalidPrefix.$this->id/hoge")->is('Hoge');
-        that($cache)->setByHash("$invalidPrefix.$this->id/fuga", 'Fuga', 0)->isTrue();
+        that($cache)->setByHash("$invalidPrefix.$this->id/fuga", 'Fuga', 0)->isFalse();
         that($cache)->deleteByHash("$invalidPrefix.$this->id/hoge")->isTrue();
         that($cache)->hasByHash("$invalidPrefix.$this->id/hoge")->isFalse();
-        that($cache)->has('hoge')->isFalse();
+        that($cache)->fetchByHash("$invalidPrefix.$this->id/hoge", fn() => 'Hoge2')->is('Hoge2');
 
         that($cache)->setMultipleByHash([
             "$invalidPrefix.$this->id/x" => 'X',
@@ -404,10 +404,19 @@ class StreamCacheTest extends AbstractTestCase
             "$invalidPrefix.$this->id/y" => 'Y',
             "$invalidPrefix.$this->id/z" => 'Z',
         ]);
+        that($cache)->deleteMultipleByHash([
+            "$invalidPrefix.$this->id/x",
+        ])->isTrue();
 
-        that($cache)->setMultipleByHash([
+        that($cache)->fetchMultipleByHash([
+            "$invalidPrefix.$this->id/x" => fn() => 'X1',
+            "$invalidPrefix.$this->id/y" => fn() => 'Y1',
+            "$invalidPrefix.$this->id/z" => fn() => 'Z1',
+        ], 1)->is([
             "$invalidPrefix.$this->id/x" => 'X1',
-        ], 1)->isTrue();
+            "$invalidPrefix.$this->id/y" => 'Y',
+            "$invalidPrefix.$this->id/z" => 'Z',
+        ]);
         that($cache)->getMultipleByHash([
             "$invalidPrefix.$this->id/x",
             "$invalidPrefix.$this->id/y",
@@ -430,13 +439,61 @@ class StreamCacheTest extends AbstractTestCase
         ]);
 
         that($cache)->deleteMultipleByHash([
+            "$invalidPrefix.$this->id/none",
+        ])->isFalse();
+        that($cache)->deleteMultipleByHash([
             "$invalidPrefix.$this->id/y",
         ])->isTrue();
-        that($cache)->has('hoge')->isTrue();
+        that($cache)->getByHash("$invalidPrefix.$this->id/y")->is(null);
+        that($cache)->getByHash("$invalidPrefix.$this->id/z")->is('Z');
         that($cache)->deleteMultipleByHash([
             "$invalidPrefix.$this->id/z",
         ])->isTrue();
-        that($cache)->has('hoge')->isFalse();
+        that($cache)->getByHash("$invalidPrefix.$this->id/y")->is(null);
+        that($cache)->getByHash("$invalidPrefix.$this->id/z")->is(null);
+
+        that($cache)->___hashClosure = fn() => 'hashed';
+
+        $error = null;
+        set_error_handler(function ($level, $message) use (&$error) {
+            if (!(error_reporting() & $level)) {
+                return false;
+            }
+            $error = [
+                'level'   => $level,
+                'message' => $message,
+            ];
+        });
+
+        try {
+            $cache->setMultipleByHash([
+                "$this->id/a" => 'A1',
+                "$this->id/b" => 'B1',
+            ]);
+            that($error)->is([
+                'level'   => E_USER_WARNING,
+                'message' => "hash collision($this->id/b vs $this->id/a)",
+            ]);
+
+            $cache->setByHash("$this->id/a", 'A1');
+            $cache->setByHash("$this->id/b", 'B1');
+            that($cache)->getByHash("$this->id/a")->is(null);
+            that($cache)->getByHash("$this->id/b")->is('B1');
+            that($error)->is([
+                'level'   => E_USER_WARNING,
+                'message' => "hash collision($this->id/a vs $this->id/b)",
+            ]);
+
+            that($cache)->fetchByHash("$this->id/a", fn() => 'A2')->is('A2');
+            that($cache)->fetchByHash("$this->id/b", fn() => 'B2')->is('B1');
+            that($error)->is([
+                'level'   => E_USER_WARNING,
+                'message' => "hash collision($this->id/a vs $this->id/b)",
+            ]);
+        }
+        finally {
+            restore_error_handler();
+        }
     }
 
     /**

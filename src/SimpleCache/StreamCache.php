@@ -67,8 +67,6 @@ class StreamCache implements AllInterface
             'php-serialize' => \ryunosuke\SimpleCache\Item\SerializationItem::class,
         ];
 
-        $this->___defaultTtl = $this->defaultTtl;
-
         $this->items    = [];
         $this->cachemap = [];
         $this->lockings = [];
