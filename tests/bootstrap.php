@@ -4,6 +4,8 @@ use ryunosuke\StreamWrapper\Stream\MysqlStream;
 use ryunosuke\StreamWrapper\Stream\RedisStream;
 use ryunosuke\StreamWrapper\Stream\S3Stream;
 
+putenv("AWS_SUPPRESS_PHP_DEPRECATION_WARNING=true");
+
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../vendor/ryunosuke/phpunit-extension/inc/bootstrap.php';
 

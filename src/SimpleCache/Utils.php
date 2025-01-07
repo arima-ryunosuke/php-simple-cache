@@ -18,9 +18,9 @@ class Utils
      *
      * Example:
      * ```php
-     * that(array_all([true, true]))->isTrue();
-     * that(array_all([true, false]))->isFalse();
-     * that(array_all([false, false]))->isFalse();
+     * that(array_and([true, true]))->isTrue();
+     * that(array_and([true, false]))->isFalse();
+     * that(array_and([false, false]))->isFalse();
      * ```
      *
      * @package ryunosuke\Functions\Package\array
@@ -30,7 +30,7 @@ class Utils
      * @param bool|mixed $default 空配列の場合のデフォルト値
      * @return bool 全要素が true なら true
      */
-    public static function array_all($array, $callback = null, $default = true)
+    public static function array_and($array, $callback = null, $default = true)
     {
         if (\ryunosuke\SimpleCache\Utils::is_empty($array)) {
             return $default;
@@ -135,11 +135,11 @@ class Utils
      * Example:
      * ```php
      * // 最初に見つかったキーを返す
-     * that(array_find(['a', '8', '9'], 'ctype_digit'))->isSame(1);
-     * that(array_find(['a', 'b', 'b'], fn($v) => $v === 'b'))->isSame(1);
+     * that(array_find_first(['a', '8', '9'], 'ctype_digit'))->isSame(1);
+     * that(array_find_first(['a', 'b', 'b'], fn($v) => $v === 'b'))->isSame(1);
      * // 最初に見つかったコールバック結果を返す（最初の数字の2乗を返す）
      * $ifnumeric2power = fn($v) => ctype_digit($v) ? $v * $v : false;
-     * that(array_find(['a', '8', '9'], $ifnumeric2power, false))->isSame(64);
+     * that(array_find_first(['a', '8', '9'], $ifnumeric2power, false))->isSame(64);
      * ```
      *
      * @package ryunosuke\Functions\Package\array
@@ -149,7 +149,7 @@ class Utils
      * @param bool $is_key キーを返すか否か
      * @return mixed コールバックが true を返した最初のキー。存在しなかったら null
      */
-    public static function array_find($array, $callback, $is_key = true)
+    public static function array_find_first($array, $callback, $is_key = true)
     {
         $callback = \ryunosuke\SimpleCache\Utils::func_user_func_array($callback);
 
@@ -639,7 +639,7 @@ class Utils
                         ];
                         break;
                     case T_USE:
-                        $tokenCorF = \ryunosuke\SimpleCache\Utils::array_find($tokens, fn($token) => ($token->id === T_CONST || $token->id === T_FUNCTION) ? $token->id : 0, false);
+                        $tokenCorF = \ryunosuke\SimpleCache\Utils::array_find_first($tokens, fn($token) => ($token->id === T_CONST || $token->id === T_FUNCTION) ? $token->id : 0, false);
 
                         $prefix = '';
                         if (end($tokens)->text === '{') {
@@ -1251,8 +1251,12 @@ class Utils
      *   - 上記二つは __call/__callStatic のメソッドも呼び出せる
      * - getDeclaration: 宣言部のコードを返す
      * - getCode: 定義部のコードを返す
+     * - isAnonymous: 無名関数なら true を返す（8.2 の isAnonymous 互換）
      * - isStatic: $this バインド可能かを返す（クロージャのみ）
      * - getUsedVariables: use している変数配列を返す（クロージャのみ）
+     * - getClosure: 元となったオブジェクトを $object としたクロージャを返す（メソッドのみ）
+     *   - 上記二つは __call/__callStatic のメソッドも呼び出せる
+     * - getTraitMethod: トレイト側のリフレクションを返す（メソッドのみ）
      *
      * Example:
      * ```php
@@ -1306,6 +1310,11 @@ class Utils
                 {
                     return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[1];
                 }
+
+                public function isAnonymous(): bool
+                {
+                    return false;
+                }
             };
         }
         elseif ($callable instanceof \Closure) {
@@ -1340,6 +1349,15 @@ class Utils
                     return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[1];
                 }
 
+                public function isAnonymous(): bool
+                {
+                    if (method_exists(\ReflectionFunction::class, 'isAnonymous')) {
+                        return parent::isAnonymous(); // @codeCoverageIgnore
+                    }
+
+                    return strpos($this->name, '{closure}') !== false;
+                }
+
                 public function isStatic(): bool
                 {
                     return !\ryunosuke\SimpleCache\Utils::is_bindable_closure($this->callable);
@@ -1347,6 +1365,10 @@ class Utils
 
                 public function getUsedVariables(): array
                 {
+                    if (method_exists(\ReflectionFunction::class, 'getClosureUsedVariables')) {
+                        return parent::getClosureUsedVariables(); // @codeCoverageIgnore
+                    }
+
                     $uses = \ryunosuke\SimpleCache\Utils::object_properties($this->callable);
                     unset($uses['this']);
                     return $uses;
@@ -1405,6 +1427,59 @@ class Utils
                 public function getCode(): string
                 {
                     return ($this->definition ??= \ryunosuke\SimpleCache\Utils::callable_code($this))[1];
+                }
+
+                public function isAnonymous(): bool
+                {
+                    return false;
+                }
+
+                public function getClosure(?object $object = null): \Closure
+                {
+                    $name = strtolower($this->name);
+
+                    if ($this->isStatic()) {
+                        if ($name === '__callstatic') {
+                            return \Closure::fromCallable([$this->class, $this->call_name]);
+                        }
+                        return parent::getClosure();
+                    }
+
+                    $object ??= $this->callable[0];
+                    if ($name === '__call') {
+                        return \Closure::fromCallable([$object, $this->call_name]);
+                    }
+                    return parent::getClosure($object);
+                }
+
+                public function getTraitMethod(): ?\ReflectionMethod
+                {
+                    $name = strtolower($this->name);
+                    $class = $this->getDeclaringClass();
+                    $aliases = array_change_key_case($class->getTraitAliases(), CASE_LOWER);
+
+                    if (!isset($aliases[$name])) {
+                        if ($this->getFileName() === $class->getFileName()) {
+                            return null;
+                        }
+                        else {
+                            return $this;
+                        }
+                    }
+
+                    [$tname, $mname] = explode('::', $aliases[$name]);
+                    $result = new self($tname, $mname, $this->callable, $this->call_name);
+
+                    // alias を張ったとしても自身で再宣言はエラーなく可能で、その場合自身が採用されるようだ
+                    if (false
+                        || $this->getFileName() !== $result->getFileName()
+                        || $this->getStartLine() !== $result->getStartLine()
+                        || $this->getEndLine() !== $result->getEndLine()
+                    ) {
+                        return null;
+                    }
+
+                    return $result;
                 }
             };
         }
@@ -1503,7 +1578,12 @@ class Utils
     public static function starts_with(?string $string, $with, $case_insensitivity = false)
     {
         foreach ((array) $with as $w) {
-            assert(strlen($w));
+            $w = (string) $w;
+
+            // All strings end with the empty string
+            if ($w === '') {
+                return true;
+            }
 
             if (\ryunosuke\SimpleCache\Utils::str_equals(substr($string, 0, strlen($w)), $w, $case_insensitivity)) {
                 return true;
@@ -2102,21 +2182,31 @@ class Utils
             $resolveSymbol = function ($token, $prev, $next, $ref) use ($var_export) {
                 $text = $token->text;
                 if ($token->id === T_STRING) {
+                    $namespaces = [$ref->getNamespaceName()];
+                    if ($ref instanceof \ReflectionFunctionAbstract) {
+                        $namespaces[] = $ref->getClosureScopeClass()?->getNamespaceName();
+                    }
                     if ($prev->id === T_NEW || $next->id === T_DOUBLE_COLON || $next->id === T_VARIABLE || $next->text === '{') {
                         $text = \ryunosuke\SimpleCache\Utils::namespace_resolve($text, $ref->getFileName(), 'alias') ?? $text;
                     }
                     elseif ($next->text === '(') {
                         $text = \ryunosuke\SimpleCache\Utils::namespace_resolve($text, $ref->getFileName(), 'function') ?? $text;
                         // 関数・定数は use しなくてもグローバルにフォールバックされる（=グローバルと名前空間の区別がつかない）
-                        if (!function_exists($text) && function_exists($nstext = '\\' . $ref->getNamespaceName() . '\\' . $text)) {
-                            $text = $nstext;
+                        foreach ($namespaces as $namespace) {
+                            if (!function_exists($text) && function_exists($nstext = "\\$namespace\\$text")) {
+                                $text = $nstext;
+                                break;
+                            }
                         }
                     }
                     else {
                         $text = \ryunosuke\SimpleCache\Utils::namespace_resolve($text, $ref->getFileName(), 'const') ?? $text;
                         // 関数・定数は use しなくてもグローバルにフォールバックされる（=グローバルと名前空間の区別がつかない）
-                        if (!\ryunosuke\SimpleCache\Utils::const_exists($text) && \ryunosuke\SimpleCache\Utils::const_exists($nstext = '\\' . $ref->getNamespaceName() . '\\' . $text)) {
-                            $text = $nstext;
+                        foreach ($namespaces as $namespace) {
+                            if (!\ryunosuke\SimpleCache\Utils::const_exists($text) && \ryunosuke\SimpleCache\Utils::const_exists($nstext = "\\$namespace\\$text")) {
+                                $text = $nstext;
+                                break;
+                            }
                         }
                     }
                 }
@@ -2148,7 +2238,7 @@ class Utils
 
             if (is_array($value)) {
                 $hashed = \ryunosuke\SimpleCache\Utils::is_hasharray($value);
-                if (!$hashed && \ryunosuke\SimpleCache\Utils::array_all($value, fn(...$args) => \ryunosuke\SimpleCache\Utils::is_primitive(...$args))) {
+                if (!$hashed && \ryunosuke\SimpleCache\Utils::array_and($value, fn(...$args) => \ryunosuke\SimpleCache\Utils::is_primitive(...$args))) {
                     [$begin, $middle, $end] = ["", ", ", ""];
                 }
                 else {
@@ -2198,12 +2288,12 @@ class Utils
             if ($value instanceof \Closure) {
                 $ref = new \ReflectionFunction($value);
                 $bind = $ref->getClosureThis();
-                $class = $ref->getClosureScopeClass() ? $ref->getClosureScopeClass()->getName() : null;
+                $class = $ref->getClosureScopeClass();
                 $statics = $ref->getStaticVariables();
 
                 // 内部由来はきちんと fromCallable しないと差異が出てしまう
                 if ($ref->isInternal()) {
-                    $receiver = $bind ?? $class;
+                    $receiver = $bind ?? $class?->getName();
                     $callee = $receiver ? [$receiver, $ref->getName()] : $ref->getName();
                     return "\$this->$vid = \\Closure::fromCallable({$export($callee, $nest)})";
                 }
@@ -2262,8 +2352,14 @@ class Utils
                     'baseline' => -1,
                 ]);
                 if ($bind) {
-                    $scope = $var_export($class === 'Closure' ? 'static' : $class);
-                    $code = "\Closure::bind($code, {$export($bind, $nest + 1)}, $scope)";
+                    $instance = $export($bind, $nest + 1);
+                    if ($class->isAnonymous()) {
+                        $scope = "get_class({$export($bind, $nest + 1)})";
+                    }
+                    else {
+                        $scope = $var_export($class?->getName() === 'Closure' ? 'static' : $class?->getName());
+                    }
+                    $code = "\Closure::bind($code, $instance, $scope)";
                 }
                 elseif (!\ryunosuke\SimpleCache\Utils::is_bindable_closure($value)) {
                     $code = "static $code";
