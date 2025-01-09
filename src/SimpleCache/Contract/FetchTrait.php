@@ -9,25 +9,7 @@ trait FetchTrait
 {
     public function fetch(string $key, callable $provider, null|int|DateInterval $ttl = null)
     {
-        $this->_lock($key, LOCK_SH);
-        try {
-            $value = $this->get($key, $this);
-            if ($value === $this) {
-                if ($this->_lock($key, LOCK_EX)) {
-                    if ($this->has($key)) {
-                        // @codeCoverageIgnoreStart edge case. see test case
-                        return $this->get($key);
-                        // @codeCoverageIgnoreEnd
-                    }
-                }
-                $value = $provider($this);
-                $this->set($key, $value, $ttl);
-            }
-            return $value;
-        }
-        finally {
-            $this->_lock($key, LOCK_UN);
-        }
+        return $this->fetchMultiple([$key => $provider], $ttl)[$key];
     }
 
     public function fetchMultiple(iterable $providers, null|int|DateInterval $ttl = null): iterable
@@ -36,17 +18,17 @@ trait FetchTrait
         $keys      = array_keys($providers);
 
         foreach ($keys as $key) {
-            $this->_lock($key, LOCK_SH);
+            $this->___lock($key, LOCK_SH);
         }
         try {
             $result   = [];
             $missings = [];
             foreach ($this->getMultiple($keys, $this) as $key => $value) {
                 if ($value === $this) {
-                    if ($this->_lock($key, LOCK_EX)) {
-                        if ($this->has($key)) {
+                    if ($this->___lock($key, LOCK_EX)) {
+                        if (($value = $this->get($key, $this)) !== $this) {
                             // @codeCoverageIgnoreStart edge case. see test case
-                            $result[$key] = $this->get($key);
+                            $result[$key] = $value;
                             continue;
                             // @codeCoverageIgnoreEnd
                         }
@@ -64,12 +46,12 @@ trait FetchTrait
         }
         finally {
             foreach ($keys as $key) {
-                $this->_lock($key, LOCK_UN);
+                $this->___lock($key, LOCK_UN);
             }
         }
     }
 
-    private function _lock(string $key, int $operation): bool
+    private function ___lock(string $key, int $operation): bool
     {
         if ($this instanceof LockableInterface) {
             return $this->lock($key, $operation);
